@@ -1117,7 +1117,7 @@ class RiScript:
 
         # strip any unresolved symbols (stuck after all passes)
         if not opts.get('silent'):
-            expr = re.sub(r'(?:\$|#)[A-Za-z_][A-Za-z_0-9]*(?:\(\))?(?:\.[A-Za-z_][A-Za-z_0-9]*(?:\(\))?)*', '', expr)
+            expr = re.sub(r'(?<!&)(?:\$|#)[A-Za-z_][A-Za-z_0-9]*(?:\(\))?(?:\.[A-Za-z_][A-Za-z_0-9]*(?:\(\))?)*', '', expr)
 
         result = _post_parse(expr)
         if not ends_with_newline:
