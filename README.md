@@ -2,7 +2,7 @@
 Python port of RiTa
 
 # Status
-In-progress, currently supports on RiScript subset
+In-progress, currently supports only RiScript subset
 
 ## Installation
 
