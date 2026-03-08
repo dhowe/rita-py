@@ -1,22 +1,23 @@
 # rita-py
 Python port of RiTa
 
-# Status
-In-progress, currently supports only RiScript subset
-
 ## Installation
 
-Clone the repo and install dependencies:
+Clone the repo and set up a virtual environment:
 
 ```bash
 git clone https://github.com/dhowe/rita-py.git
 cd rita-py
+python3 -m venv .venv
+source .venv/bin/activate
 pip install pytest
 ```
 
-No other dependencies are required for core functionality.
+> On Windows, activate with `.venv\Scripts\activate` instead.
 
 ## Running the Tests
+
+Make sure your virtual environment is active (`source .venv/bin/activate`), then:
 
 Run all tests:
 

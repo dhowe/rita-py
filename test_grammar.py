@@ -4,7 +4,7 @@ test_grammar.py — Python port of grammar.tests.js
 import re
 import math
 import pytest
-from python.riscript import RiGrammar, RiScript, EvalVisitor
+from riscript import RiGrammar, RiScript, EvalVisitor
 
 IfRiTa = False  # set True if RiTa NLP is available
 

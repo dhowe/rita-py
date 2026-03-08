@@ -3,9 +3,7 @@ test_riscript.py — Python port of riscript.tests.js
 """
 import re
 import pytest
-import sys, os
-sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
-from python.riscript import RiScript, EvalVisitor, _string_hash, parse_jsol
+from riscript import RiScript, EvalVisitor, _string_hash, parse_jsol
 
 # ── fixtures ─────────────────────────────────────────────────────────────────
 

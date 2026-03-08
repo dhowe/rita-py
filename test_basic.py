@@ -1,7 +1,7 @@
 """Basic smoke tests for the Python RiScript implementation."""
 import sys, os
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
-from python.riscript import RiScript
+from riscript import RiScript
 
 rs = RiScript()
 passed = failed = 0
