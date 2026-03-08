@@ -1,0 +1,895 @@
+"""
+test_riscript.py — Python port of riscript.tests.js
+"""
+import re
+import pytest
+import sys, os
+sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+from python.riscript import RiScript, EvalVisitor, _string_hash, parse_jsol
+
+# ── fixtures ─────────────────────────────────────────────────────────────────
+
+@pytest.fixture(autouse=True)
+def rs():
+    return RiScript()
+
+@pytest.fixture
+def ri():
+    return RiScript()
+
+def ev(rs, script, ctx=None, **opts):
+    return rs.evaluate(script, ctx or {}, **opts)
+
+
+# ── Markdown ──────────────────────────────────────────────────────────────────
+
+class TestMarkdown:
+    def test_basic_markdown(self, rs):
+        t = 'Some *italic* and **bold** and _other_ markdown'
+        assert rs.evaluate(t) == t
+        t2 = '1. list 1\n2. list 2\n3. list 3'
+        assert rs.evaluate(t2) == t2
+
+    def test_markdown_headers(self, rs):
+        assert rs.evaluate('### Header') == '### Header'
+
+    def test_markdown_links(self, rs):
+        assert rs.evaluate('Some [RiTa](https://rednoise.org/rita) code') == 'Some [RiTa](https://rednoise.org/rita) code'
+        assert rs.evaluate('Some [RiTa+](https://rednoise.org/rita?a=b&c=k) code') == 'Some [RiTa+](https://rednoise.org/rita?a=b&c=k) code'
+        assert rs.evaluate('Some [RiScript](/@dhowe/riscript) code') == 'Some [RiScript](/@dhowe/riscript) code'
+
+    def test_formatted_markdown(self, rs):
+        inp = '### A Title \n      Some RiScript code\n        that we can [format|format|format]\n           with *[inline | inline]* Markdown\n             and rerun [once per | once per] second\n               [using|using|using] the **[pulse].qq** function below'
+        expected = '### A Title \n      Some RiScript code\n        that we can format\n           with *inline* Markdown\n             and rerun once per second\n               using the **\u201cpulse\u201d** function below'
+        assert rs.evaluate(inp) == expected
+
+
+# ── Sequences ─────────────────────────────────────────────────────────────────
+
+class TestSequences:
+    def test_norepeat_choice_transforms(self, rs):
+        for _ in range(5):
+            res = rs.evaluate('$names=[a|b]\n$names $names.norepeat()')
+            assert re.match(r'^[a-e] [a-e]$', res)
+            parts = res.split(' ')
+            assert len(parts) == 2
+            assert parts[0] != parts[1]
+
+    def test_single_norepeat_choices(self, rs):
+        for _ in range(5):
+            res = rs.evaluate('$b=a[b|c|d]e\n$b $b.nr')
+            assert re.search(r'a[bcd]e a[bcd]e', res)
+            parts = res.split(' ')
+            assert len(parts) == 2
+            assert parts[0] != parts[1]
+        for _ in range(5):
+            res = rs.evaluate('$b=[a[b | c | d]e]\n$b $b.nr')
+            assert re.search(r'a[bcd]e a[bcd]e', res)
+            parts = res.split(' ')
+            assert len(parts) == 2
+            assert parts[0] != parts[1]
+
+    def test_norepeat_symbol_transforms(self, rs):
+        fail = False
+        for _ in range(5):
+            res = rs.evaluate('$rule=[a|b|c|d|e]\n$rule.nr $rule.nr')
+            assert re.match(r'^[a-e] [a-e]$', res)
+            parts = res.split(' ')
+            assert len(parts) == 2
+            if parts[0] == parts[1]:
+                fail = True
+                break
+        assert not fail
+
+    def test_throws_norepeat_statics(self, rs):
+        with pytest.raises(Exception):
+            rs.evaluate('#a=[a|b]\n$a $a.nr')
+        with pytest.raises(Exception):
+            rs.evaluate('#a=[a|b]\n#a #a.nr')
+
+    def test_throws_dynamic_as_static(self, rs):
+        with pytest.raises(Exception):
+            rs.evaluate('{$foo=bar}#foo')
+
+    def test_throws_norepeat_in_context(self, rs):
+        with pytest.raises(Exception):
+            rs.evaluate('$foo $foo.nr', {'foo': '[a|b]'})
+
+
+# ── Gates ─────────────────────────────────────────────────────────────────────
+
+class TestGates:
+    def test_throws_bad_gates(self, rs):
+        with pytest.raises(Exception):
+            rs.evaluate('$a=ok\n[ @{$a: ok} hello]')  # unquoted str
+        with pytest.raises(Exception):
+            rs.evaluate('[@{} [a|a] || [b|b] ]')       # no ops in gate
+
+    def test_transforms_in_gate_operands(self, rs):
+        ctx = {'getHours': lambda: __import__('datetime').datetime.now().hour}
+        res = rs.evaluate('[ @{ $getHours(): { @lt: 12 } } morning || evening]', ctx)
+        expected = 'morning' if __import__('datetime').datetime.now().hour < 12 else 'evening'
+        assert res == expected
+
+    def test_time_based_gates(self, rs):
+        ctx = {'getHours': lambda: __import__('datetime').datetime.now().hour}
+        res = rs.evaluate('$hours=$getHours()\n[ @{ $hours: {@lt: 12} } morning || evening]', ctx)
+        expected = 'morning' if __import__('datetime').datetime.now().hour < 12 else 'evening'
+        assert res == expected
+
+    def test_new_style_gates(self, rs):
+        assert rs.evaluate('[ @{ $a: { @exists: true }} hello]', {'b': 2}) == ''
+        assert rs.evaluate('[ @{ $a: { @exists: true }} hello]', {'a': 2}) == 'hello'
+
+    def test_exists_gates(self, rs):
+        assert rs.evaluate('[ @{ $a: { @exists: true }} user]', {'a': 'apogee'}) == 'user'
+        assert rs.evaluate('[ @{ $a: { @exists: true }} user]', {'b': 'apogee'}) == ''
+        assert rs.evaluate('[ @{ $a: { @exists: true }} &lt;]', {'a': 'apogee'}) == '<'
+        assert rs.evaluate('$a=apogee\n[ @{ $a: { @exists: true }} dynamic]') == 'dynamic'
+        assert rs.evaluate('$b=apogee\n[ @{ $a: { @exists: true }} dynamic]') == ''
+        assert rs.evaluate('{$b=apogee}[ @{ $a: { @exists: true }} dynamic]') == ''
+        assert rs.evaluate('[$a=apogee] [ @{ $a: { @exists: true }} dynamic]') == 'apogee dynamic'
+        assert rs.evaluate('#a=apogee\n[ @{ $a: { @exists: true }} static]') == 'static'
+        assert rs.evaluate('#b=apogee\n[ @{ $a: { @exists: true }} static]') == ''
+
+    def test_matching_gates(self, rs):
+        assert rs.evaluate('[ @{ $a: /^p/ } hello]', {'a': 'apogee'}) == ''
+        assert rs.evaluate('[ @{ $a: /^p/ } hello]', {'a': 'puffer'}) == 'hello'
+        assert rs.evaluate('[ @{ $a: /^p/ } $a]', {'a': 'pogue'}) == 'pogue'
+
+    def test_nested_gates(self, rs):
+        res = rs.evaluate('$x=2\n$y=3\n[ @{$x:1} [a] || [@{$y:3} b ]]')
+        assert res == 'b'
+        res = rs.evaluate('$x=2\n$y=4\n[ @{$x:1} [a] || [@{$y:3} b || c ]]')
+        assert res == 'c'
+
+    def test_else_gates(self, rs):
+        assert rs.evaluate('$x=2\n[@{$x:2} [a] || [b]]') == 'a'
+        assert rs.evaluate('$x=1\n[@{$x:1}a||b]') == 'a'
+        assert rs.evaluate('$x=2\n[@{$x:1}a||b]') == 'b'
+        assert rs.evaluate('[@{$x:3}a||b]', {'x': 3}) == 'a'
+        assert rs.evaluate('[@{$x:4}a||b]', {'x': 3}) == 'b'
+        assert rs.evaluate('[a||b]') == 'a'
+
+    def test_deferred_else_gates(self, rs):
+        assert rs.evaluate('[@{$a:1}a||b]\n$a=1') == 'a'
+        assert rs.evaluate('[@{$a:2}a||b]\n$a=1') == 'b'
+        assert rs.evaluate('[ @{$a:2} [accept|accept] || [reject|reject] ]\n$a=1') == 'reject'
+        assert rs.evaluate('[@{$a:2}a||b]') == 'b'
+
+    def test_equality_gates(self, rs):
+        assert rs.evaluate('$a=3\n[ @{$a: "3"} hello]') == 'hello'
+        assert rs.evaluate('$a=2\n[ @{$a: 3} hello]') == ''
+        assert rs.evaluate('$a=3\n[ @{$a: 3} hello]') == 'hello'
+        assert rs.evaluate('$a=ok\n[ @{$a: "ok"} hello]') == 'hello'
+        assert rs.evaluate('$a=notok\n[ @{$a: "ok"} hello]') == ''
+
+    def test_deferred_equality_gates(self, rs):
+        assert rs.evaluate('[ @{$a: 3} hello]', {'a': 2}) == ''
+        assert rs.evaluate('[ @{$a: 3} hello]', {'a': 3}) == 'hello'
+        assert rs.evaluate('[ @{$a: "ok"} hello]', {'a': 'ok'}) == 'hello'
+        assert rs.evaluate('[ @{$a: "ok"} hello]', {'a': 'fail'}) == ''
+
+    def test_arithmetic_gates(self, rs):
+        assert rs.evaluate('$a=4\n[ @{$a: {@gt: 3}} hello]') == 'hello'
+        assert rs.evaluate('$a=3\n[ @{$a: {@gt: 3}} hello]') == ''
+        assert rs.evaluate('$a=3.1\n[ @{$a: {@gt: 3}} hello]') == 'hello'
+
+    def test_boolean_gate_logic(self, rs):
+        assert rs.evaluate('$a=2\n[ @{$a: {}} hello]') == ''
+        assert rs.evaluate('$a=2\n[ @{$a: {@gt: 3}} hello]') == ''
+        assert rs.evaluate('$a=4\n[ @{$a: {@gt: 3}} hello]') == 'hello'
+        assert rs.evaluate('$a=27\n[ @{$a: {@gt:25, @lt:32}} hello]') == 'hello'
+        assert rs.evaluate('$a=4\n[ @{$a: {@gt:25, @lt:32}} hello]') == ''
+        assert rs.evaluate('$a=27\n[ @{ @or: [ {$a: {@gt: 30}}, {$a: {@lt: 20}} ] } hello]') == ''
+        assert rs.evaluate('$a=35\n[ @{ @or: [ {$a: {@gt: 30}}, {$a: {@lt: 20}} ] } hello]') == 'hello'
+        assert rs.evaluate('$a=23\n[ @{ @and: [ {$a: {@gt: 20}}, {$a: {@lt: 25}} ] } hello]') == 'hello'
+        assert rs.evaluate('$a=27\n[ @{ @and: [ {$a: {@gt: 20}}, {$a: {@lt: 25}} ] } hello]') == ''
+
+    def test_deferred_dynamics_gates(self, rs):
+        assert rs.evaluate('[ @{$a: "ok"} hello]\n$a=ok') == 'hello'
+
+    def test_deferred_boolean_gates(self, rs):
+        assert rs.evaluate('[ @{$a: {}} hello]', {'a': 2}) == ''
+        assert rs.evaluate('[ @{$a: {@gt: 3}} hello]', {'a': 4}) == 'hello'
+        assert rs.evaluate('[ @{$a: {@gt:25, @lt:32}} hello]', {'a': 27}) == 'hello'
+        assert rs.evaluate('[ @{ @or: [ {$a: {@gt: 30}}, {$a: {@lt: 20}} ] } hello]', {'a': 35}) == 'hello'
+        assert rs.evaluate('[ @{ @and: [ {$a: {@gt: 20}}, {$a: {@lt: 25}} ] } hello]', {'a': 23}) == 'hello'
+
+    def test_deferred_gates(self, rs):
+        assert rs.evaluate('$a=$b\n[ @{ $a: "cat" } hello]\n$b=[cat|cat]') == 'hello'
+        assert rs.evaluate('[ @{ $a: { @exists: true }} dynamic]\n$a=apogee') == 'dynamic'
+        assert rs.evaluate('[ @{ $a: { @exists: true }} dynamic]\n{$a=apogee}') == 'dynamic'
+        assert rs.evaluate('[ @{ $a: { @exists: true }} dynamic]\n$b=apogee') == ''
+        assert rs.evaluate('[ @{ $a: { @exists: true }} static]\n#a=apogee') == 'static'
+        assert rs.evaluate('[ @{ $a: { @exists: true }} static]\n#b=apogee') == ''
+
+    def test_gates_string_chars(self, rs):
+        assert rs.evaluate("$a=bc\n[@{$a: 'bc'} $a]") == 'bc'
+        assert rs.evaluate("$a=bc\n[@{$a: 'cd'} $a]") == ''
+        assert rs.evaluate('$a=bc\n[@{$a: "bc"} $a]') == 'bc'
+
+    def test_gates_chinese(self, rs):
+        assert rs.evaluate('$a=繁體\n[@{$a: "繁體"} $a]') == '繁體'
+        assert rs.evaluate('$a=繁體\n[@{$a: "中文"} $a]') == ''
+        assert rs.evaluate('$a=繁體\n[@{$a: {@ne: "繁體"}} $a]') == ''
+        assert rs.evaluate('$a=繁體\n[@{$a: {@ne: "中文"}} $a]') == '繁體'
+
+    def test_complex_boolean_gate_logic(self, rs):
+        q = '{ $a: 3, @or: [ { $b: { @lt: 30 } }, { $c: /^p*/ } ] }'
+        ctx = '$a=27\n$b=10\n$c=pants\n'
+        assert rs.evaluate(f'{ctx}[ @{q} hello]') == ''
+        ctx = '$a=3\n$b=10\n$c=ants\n'
+        assert rs.evaluate(f'{ctx}[ @{q} hello]') == 'hello'
+        ctx = '$a=3\n$b=5\n$c=pants\n'
+        assert rs.evaluate(f'{ctx}[ @{q} hello]') == 'hello'
+
+
+# ── Choice ────────────────────────────────────────────────────────────────────
+
+class TestChoice:
+    def test_throws_bad_choices(self, rs):
+        for bad in ['|', 'a |', 'a | b', 'a | b | c', '[a | b] | c']:
+            with pytest.raises(Exception):
+                rs.evaluate(bad)
+        with pytest.raises(Exception):
+            rs.evaluate('[a | b].nr()')
+        with pytest.raises(Exception):
+            rs.evaluate('[$names=[a|b|c|d|e]].nr()')
+
+    def test_choices_in_context(self, rs):
+        res = rs.evaluate('$bar:$bar', {'bar': '[man | boy]'})
+        assert re.match(r'(man|boy):(man|boy)', res)
+
+    def test_even_distribution(self, rs):
+        counts = {}
+        for _ in range(1000):
+            r = rs.evaluate('[quite|]')
+            counts[r] = counts.get(r, 0) + 1
+        assert counts.get('quite', 0) > 400
+        assert counts.get('', 0) > 400
+
+    def test_resolves_choices(self, rs):
+        assert rs.evaluate('[|]') == ''
+        assert rs.evaluate('[a]') == 'a'
+        assert rs.evaluate('[a | a]') == 'a'
+        assert rs.evaluate('[a | ]') in ['a', '']
+        assert rs.evaluate('[a | b]') in ['a', 'b']
+        assert rs.evaluate('[a | b | c]') in ['a', 'b', 'c']
+        assert rs.evaluate('[a | [b | c] | d]') in ['a', 'b', 'c', 'd']
+        assert rs.evaluate('not [quite|] far enough') in ['not far enough', 'not quite far enough']
+
+    def test_multiword_choices(self, rs):
+        assert rs.evaluate('[A B | A B]') == 'A B'
+        assert rs.evaluate('[A B].toLowerCase()') == 'a b'
+        assert rs.evaluate('[A B | A B].toLowerCase()') == 'a b'
+        assert rs.evaluate('[A B | A B].articlize()') == 'an A B'
+
+    def test_choices_in_expressions(self, rs):
+        assert rs.evaluate('x [a | a | a] x') == 'x a x'
+        assert rs.evaluate('x [a | a | a]') == 'x a'
+        assert rs.evaluate('x [a | a | a]x') == 'x ax'
+        assert rs.evaluate('x[a | a | a] x') == 'xa x'
+        assert rs.evaluate('x[a | a | a]x') == 'xax'
+        assert rs.evaluate('x [a | a | a] [b | b | b] x') == 'x a b x'
+        assert rs.evaluate('[a|a]') == 'a'
+        assert rs.evaluate('This is &lpar;a parenthesed&rpar; expression') == 'This is (a parenthesed) expression'
+
+    def test_weighted_choices(self, rs):
+        assert rs.evaluate('[ a (2) ]') == 'a'
+        assert rs.evaluate('[a | b (2) |(3)]') in ['a', 'b', '']
+        assert rs.evaluate('[ a (2) | a (3) ]') == 'a'
+        counts = {'a': 0, 'b': 0}
+        for _ in range(100):
+            ans = rs.evaluate('[a(1) | b (3)]')
+            counts[ans] = counts.get(ans, 0) + 1
+        assert counts['a'] > 0
+        assert counts['b'] > counts['a']
+
+
+# ── Assignment ────────────────────────────────────────────────────────────────
+
+class TestAssignment:
+    def test_single_assignments_on_line_break(self, rs):
+        res = rs.evaluate('hello\n$foo=a', preserveLookups=True)
+        assert res == 'hello'
+        assert callable(rs.visitor.dynamics.get('foo'))
+        assert rs.visitor.dynamics['foo']() == 'a'
+
+        assert rs.evaluate('$foo=a\n', preserveLookups=True) == '\n'
+        assert rs.evaluate('$foo=a\nb', preserveLookups=True) == 'b'
+        assert rs.visitor.dynamics['foo']() == 'a'
+
+        res = rs.evaluate('$foo=a\n$bar=$foo', preserveLookups=True)
+        assert res == ''
+        assert callable(rs.visitor.dynamics.get('bar'))
+        assert rs.visitor.dynamics['foo']() == 'a'
+        assert rs.visitor.dynamics['bar']() == 'a'
+
+        assert rs.evaluate('$foo=[a | a]\n$foo', preserveLookups=True) == 'a'
+        assert rs.visitor.dynamics['foo']() == 'a'
+
+        assert rs.evaluate('$foo=[hi | hi]\n$foo there', preserveLookups=True) == 'hi there'
+        assert rs.visitor.dynamics['foo']() == 'hi'
+
+    def test_silent_assignments(self, rs):
+        assert rs.evaluate('{$foo=a}b', preserveLookups=True) == 'b'
+        assert rs.visitor.dynamics['foo']() == 'a'
+
+        assert rs.evaluate('{$foo=[a | a]}', preserveLookups=True) == ''
+        assert rs.visitor.dynamics['foo']() == 'a'
+
+        assert rs.evaluate('{$foo=ab}', preserveLookups=True) == ''
+        assert rs.visitor.dynamics['foo']() == 'ab'
+
+        assert rs.evaluate('{$foo=[a | a] [b | b]}', preserveLookups=True) == ''
+        assert rs.visitor.dynamics['foo']() == 'a b'
+
+    def test_resolves_prior_assignments(self, rs):
+        assert rs.evaluate('$foo=dog\n$bar=$foo\n$baz=$foo\n$baz') == 'dog'
+        assert rs.evaluate('$foo=hi\n$foo there') == 'hi there'
+        assert rs.evaluate('$foo=a\n$foo') == 'a'
+
+
+# ── Evaluation ────────────────────────────────────────────────────────────────
+
+class TestEvaluation:
+    def test_static_objects_from_context(self, rs):
+        assert rs.evaluate('Meet [$person].name', {'person': {'name': 'Lucy'}}) == 'Meet Lucy'
+        assert rs.evaluate('Meet [$person=$lucy].name', {'lucy': {'name': 'Lucy'}}) == 'Meet Lucy'
+
+    def test_simple_expressions(self, rs):
+        assert rs.evaluate('hello') == 'hello'
+        assert rs.evaluate('[a|b]') in ['a', 'b']
+        assert rs.evaluate('[hello (2)]') == 'hello'
+        assert rs.evaluate('[hello]') == 'hello'
+        assert rs.evaluate('[@{$a:2} hello]') == ''
+        assert rs.evaluate('$a=2\n$a') == '2'
+        assert rs.evaluate('[$a=2]') == '2'
+        assert rs.evaluate('[#a=2]') == '2'
+        assert rs.evaluate('#a=2') == ''
+        assert rs.evaluate('#a=2\n$a') == '2'
+        assert rs.evaluate('$a=2\n[@{$a:2} hello]') == 'hello'
+
+    def test_static_evaluate(self, rs):
+        assert RiScript.static_evaluate('(foo)', {}) == '(foo)'
+        assert RiScript.static_evaluate('foo!', {}) == 'foo!'
+        assert RiScript.static_evaluate('foo.', {}) == 'foo.'
+        assert RiScript.static_evaluate('"foo"', {}) == '"foo"'
+        assert RiScript.static_evaluate('$a=hello\n') == '\n'
+        assert RiScript.static_evaluate('hello\n') == 'hello\n'
+
+    def test_resolves_expressions(self, rs):
+        assert rs.evaluate('foo') == 'foo'
+        assert rs.evaluate('(foo)') == '(foo)'
+        assert rs.evaluate('foo!') == 'foo!'
+        assert rs.evaluate('foo.') == 'foo.'
+        assert rs.evaluate('"foo"') == '"foo"'
+        assert rs.evaluate("'foo'") == "'foo'"
+        assert rs.evaluate('$a=hello\n') == '\n'
+        assert rs.evaluate('hello\n') == 'hello\n'
+        assert rs.evaluate('*%©\n') == '*%©\n'
+
+    def test_resolves_transformed_choices(self, rs):
+        assert rs.evaluate('[A B].toLowerCase()') == 'a b'
+        assert rs.evaluate('[A B | A B].toLowerCase()') == 'a b'
+        assert rs.evaluate('[A B | A B].articlize()') == 'an A B'
+        res = rs.evaluate('$mammal=[dog | dog]\n$mammal.pluralize.ucf are unruly, but my $mammal is the best.')
+        assert res == 'Dogs are unruly, but my dog is the best.'
+
+    def test_simple_statics(self, rs):
+        assert rs.evaluate('{#foo=bar}baz') == 'baz'
+        assert rs.evaluate('{#foo=bar}$foo') == 'bar'
+        assert rs.evaluate('[#foo=bar]\nbaz') == 'bar\nbaz'
+        assert rs.evaluate('{#foo=bar}$foo baz $foo') == 'bar baz bar'
+        failed = False
+        for _ in range(5):
+            res = rs.evaluate('{#foo=[a|b|c|d]}$foo $foo $foo')
+            pts = res.split(' ')
+            assert len(pts) == 3
+            if pts[0] != pts[1] or pts[1] != pts[2]:
+                failed = True
+                break
+        assert not failed
+
+    def test_resolves_statics(self, rs):
+        res = rs.evaluate('{#bar=[man | boy]}$bar')
+        assert res in ['man', 'boy']
+        res = rs.evaluate('#bar=[man | boy]\n$foo=$bar:$bar\n$foo')
+        assert res in ['man:man', 'boy:boy']
+
+    def test_statics_from_context(self, rs):
+        res = rs.evaluate('#bar=$man\n$bar:$bar', {'man': '[BOY|boy]'})
+        assert res in ['BOY:BOY', 'boy:boy']
+
+        res = rs.evaluate('[#bar=[man | boy]]:$bar')
+        assert res in ['man:man', 'boy:boy']
+
+    def test_predefined_statics(self, rs):
+        visitor = EvalVisitor(None, None)
+        visitor.statics = {'bar': '[man | boy]'}
+        res = rs._evaluate(input='$bar:$bar', visitor=visitor)
+        assert res in ['man:man', 'boy:boy']
+
+    def test_line_breaks(self, rs):
+        assert rs.evaluate('$foo=bar\nbaz') == 'baz'
+        assert rs.evaluate('foo\nbar') == 'foo\nbar'
+        assert rs.evaluate('$foo=bar\nbaz\n$foo') == 'baz\nbar'
+        assert rs.evaluate('#foo=[a|b|c]\n$foo is $foo') in ['a is a', 'b is b', 'c is c']
+        assert rs.evaluate('<em>foo</em>') == '<em>foo</em>'
+        assert rs.evaluate('a   b') == 'a   b'
+        assert rs.evaluate('a\tb') == 'a\tb'
+
+    def test_recursive_expressions(self, rs):
+        assert rs.evaluate('[a|$a]', {'a': 'a'}) == 'a'
+        assert rs.evaluate('$a', {'a': '$b', 'b': '[c | c]'}) == 'c'
+        ctx = {'a': '$b', 'b': '[c | c]'}
+        assert rs.evaluate('$k = $a\n$k', ctx) == 'c'
+        ctx = {'s': '$a', 'a': '$b', 'b': '$c', 'c': '$d', 'd': 'c'}
+        assert rs.evaluate('$s', ctx) == 'c'
+
+
+# ── Symbols ───────────────────────────────────────────────────────────────────
+
+class TestSymbols:
+    def test_generated_symbols(self, rs):
+        sc = '$a=antelope\n$b=otter\n$an() $[a|b]'
+        res = rs.evaluate(sc, {'an': lambda: 'An'})
+        assert res in ['An antelope', 'An otter']
+
+    def test_simple_object_in_context(self, rs):
+        assert rs.evaluate('$a.name', {'a': {'name': 'Lucy'}}) == 'Lucy'
+        res = rs.evaluate('$[a | b].name', {'a': {'name': 'Lucy'}, 'b': {'name': 'Sam'}})
+        assert res in ['Lucy', 'Sam']
+
+    def test_generated_symbol_in_context(self, rs):
+        res = rs.evaluate('$[a|b]', {'a': 'Lucy', 'b': 'Sam'})
+        assert res in ['Lucy', 'Sam']
+
+        res = rs.evaluate('$person=$[a|b]\n$person', {'a': 'Lucy', 'b': 'Sam'})
+        assert res in ['Lucy', 'Sam']
+
+        res = rs.evaluate('$[a|b].name', {'a': {'name': 'Lucy'}, 'b': {'name': 'Sam'}})
+        assert res in ['Lucy', 'Sam']
+
+    def test_handles_deferred(self, rs):
+        assert rs.evaluate('$foo\n$foo=cat') == 'cat'
+
+    def test_handles_statics(self, rs):
+        res = rs.evaluate('[#bar=[boy]]:$bar')
+        assert res == 'boy:boy'
+
+        res = rs.evaluate('#foo=[cat | dog]\n$foo $foo')
+        assert res in ['cat cat', 'dog dog']
+
+    def test_handles_norepeats(self, rs):
+        for _ in range(5):
+            res = rs.evaluate('$foo=[cat|dog]\n$foo $foo.nr')
+            assert res in ['cat dog', 'dog cat']
+
+    def test_internal_line_breaks(self, rs):
+        assert rs.evaluate('$foo=[cat\ndog]\n$foo') == 'cat\ndog'
+        assert rs.evaluate('前半段句子\n後半段句子') == '前半段句子\n後半段句子'
+
+    def test_handles_silents(self, rs):
+        assert rs.evaluate('{$a=b}') == ''
+        assert rs.evaluate('$a=b') == ''
+        assert rs.evaluate('$a=b\n$a') == 'b'
+
+    def test_resolves_transforms(self, rs):
+        assert rs.evaluate('$foo=$bar.toUpperCase()\n$bar=baz\n$foo') == 'BAZ'
+        assert rs.evaluate('$foo.capitalize()\n$foo=[a|a]') == 'A'
+        assert rs.evaluate('$names=a\n$names.uc()') == 'A'
+        assert rs.evaluate('$foo=[bar].ucf\n$foo') == 'Bar'
+
+        ctx = {'bar': lambda: 'result'}
+        assert rs.evaluate('[].bar', ctx) == 'result'
+
+
+# ── Transforms ────────────────────────────────────────────────────────────────
+
+class TestTransforms:
+    def test_add_remove_custom_transforms(self, rs):
+        add_rhyme = lambda word: word + ' rhymes with bog'
+        assert rs.transforms.get('rhymes') is None
+        rs.add_transform('rhymes', add_rhyme)
+        assert rs.transforms.get('rhymes') is not None
+        res = rs.evaluate('The [dog | dog | dog].rhymes')
+        assert res == 'The dog rhymes with bog'
+        rs.remove_transform('rhymes')
+        assert rs.transforms.get('rhymes') is None
+        res = rs.evaluate('The [dog | dog | dog].rhymes', silent=True)
+        assert res == 'The dog.rhymes'
+
+    def test_anonymous_transforms(self, rs):
+        ctx = {'capB': lambda s: 'B'}
+        assert rs.evaluate('$uppercase()') == ''
+        assert rs.evaluate('$capB()', ctx) == 'B'
+        assert rs.evaluate('$uppercase') == ''
+        assert rs.evaluate('$capB', ctx) == 'B'
+        assert rs.evaluate('[].capB', ctx) == 'B'
+
+    def test_old_style_anonymous_transforms(self, rs):
+        ctx = {'capB': lambda s: 'B'}
+        assert rs.evaluate('$.uppercase()') == ''
+        assert rs.evaluate('$.capB()', ctx) == 'B'
+        assert rs.evaluate('[].capB', ctx) == 'B'
+
+    def test_transforms_containing_riscript(self, rs):
+        ctx = {'tx': lambda s: '[a | a]'}
+        assert rs.evaluate('[c].tx()', ctx) == 'a'
+
+        ctx = {'sym': 'at', 'tx': lambda s: s + '$sym'}
+        assert rs.evaluate('[c].tx()', ctx) == 'cat'
+
+        ctx = {'tx': lambda s: f'[{s}].uc()'}
+        assert rs.evaluate('[c].tx()', ctx) == 'C'
+
+    def test_resolves_transforms(self, rs):
+        assert rs.evaluate('[This].uc() is an acronym.') == 'THIS is an acronym.'
+        assert rs.evaluate('[BAZ].toLowerCase().ucf()') == 'Baz'
+        assert rs.evaluate('[c].toUpperCase()') == 'C'
+        assert rs.evaluate('[c].toUpperCase') == 'C'
+        assert rs.evaluate('$a=b\n$a.toUpperCase()') == 'B'
+        assert rs.evaluate('$a.toUpperCase()\n$a=b') == 'B'
+        assert rs.evaluate('[[a]].toUpperCase()') == 'A'
+
+        assert rs.evaluate('$dog.ucf()', {'dog': 'terrier'}) == 'Terrier'
+
+    def test_resolves_transforms_on_literals(self, rs):
+        assert rs.evaluate('How many [teeth].quotify() do you have?') == 'How many \u201cteeth\u201d do you have?'
+        assert rs.evaluate('How many [].quotify() do you have?') == 'How many \u201c\u201d do you have?'
+        assert rs.evaluate('How many [teeth].toUpperCase() do you have?') == 'How many TEETH do you have?'
+        assert rs.evaluate('That is an [ant].capitalize().') == 'That is an Ant.'
+        assert rs.evaluate('[ant].articlize().capitalize()') == 'An ant'
+        assert rs.evaluate('[ant].capitalize().articlize()') == 'an Ant'
+        assert rs.evaluate('That is [ant].articlize().') == 'That is an ant.'
+
+    def test_resolves_transforms_on_bare_symbols(self, rs):
+        assert rs.evaluate('How many $quotify() quotes do you have?') == 'How many \u201c\u201d quotes do you have?'
+        assert rs.evaluate('That is $articlize().') == 'That is .'
+        assert rs.evaluate('That is $incontext().', {'incontext': 'in context'}) == 'That is in context.'
+        assert rs.evaluate('How many $quotify quotes do you have?') == 'How many \u201c\u201d quotes do you have?'
+
+    def test_resolves_old_style_bare_symbols(self, rs):
+        assert rs.evaluate('How many $.quotify() quotes do you have?') == 'How many \u201c\u201d quotes do you have?'
+        assert rs.evaluate('That is $.articlize().') == 'That is .'
+        assert rs.evaluate('How many $.quotify quotes do you have?') == 'How many \u201c\u201d quotes do you have?'
+
+    def test_pluralize_phrases(self, rs):
+        assert rs.evaluate('These [bad feeling].pluralize().') == 'These bad feelings.'
+        assert rs.evaluate('These [$state feeling].pluralize().', {'state': 'bad'}) == 'These bad feelings.'
+
+    def test_resolves_across_assignment_types(self, rs):
+        assert rs.evaluate('The [$foo=blue] [dog | dog]', preserveLookups=True) == 'The blue dog'
+        assert rs.visitor.dynamics['foo']() == 'blue'
+
+        assert rs.evaluate('The [$foo=blue [dog | dog]]', preserveLookups=True) == 'The blue dog'
+        assert rs.visitor.dynamics['foo']() == 'blue dog'
+
+        assert rs.evaluate('{$foo=blue [dog | dog]}', preserveLookups=True) == ''
+        assert rs.visitor.dynamics['foo']() == 'blue dog'
+
+        assert rs.evaluate('The $foo=blue [dog | dog]', preserveLookups=True) == 'The blue dog'
+        assert rs.visitor.dynamics['foo']() == 'blue dog'
+
+    def test_resolves_statics_across_assignment_types(self, rs):
+        assert rs.evaluate('The [#foo=blue] [dog | dog]', preserveLookups=True) == 'The blue dog'
+        assert rs.visitor.statics.get('foo') == 'blue'
+
+        assert rs.evaluate('The [#foo=blue [dog | dog]]', preserveLookups=True) == 'The blue dog'
+        assert rs.visitor.statics.get('foo') == 'blue dog'
+
+    def test_resolves_choice_transforms(self, rs):
+        assert rs.evaluate('[a | a].toUpperCase()') == 'A'
+        assert rs.evaluate('[a | a].up()', {'up': lambda x: x.upper()}) == 'A'
+        assert rs.evaluate('[a].toUpperCase()') == 'A'
+        assert rs.evaluate('[a | b].toUpperCase()') in ['A', 'B']
+        assert rs.evaluate('[a | a].capitalize()') == 'A'
+        assert rs.evaluate('The [boy | boy].toUpperCase() ate.') == 'The BOY ate.'
+
+    def test_preserve_nonexistent_transforms(self, rs):
+        assert rs.evaluate('[a | a].up()', silent=True) == 'a.up()'
+        assert rs.evaluate('$dog.toUpperCase()', silent=True) == '$dog.toUpperCase()'
+
+    def test_resolves_symbol_transforms(self, rs):
+        assert rs.evaluate('$dog.toUpperCase()', {'dog': 'spot'}) == 'SPOT'
+        assert rs.evaluate('$dog.capitalize()', {'dog': 'spot'}) == 'Spot'
+        assert rs.evaluate('The $dog.toUpperCase()', {'dog': 'spot'}) == 'The SPOT'
+        assert rs.evaluate('The [boy | boy].toUpperCase() ate.') == 'The BOY ate.'
+        assert rs.evaluate('$dog.articlize().capitalize()', {'dog': 'spot'}) == 'A spot'
+
+    def test_resolves_symbol_multi_transforms(self, rs):
+        assert rs.evaluate('[abe | abe].articlize().capitalize()') == 'An abe'
+        assert rs.evaluate('[abe | abe].capitalize().articlize()') == 'an Abe'
+        assert rs.evaluate('[Abe Lincoln].articlize().capitalize()') == 'An Abe Lincoln'
+
+    def test_resolves_object_properties(self, rs):
+        dog = {'name': 'spot', 'color': 'white', 'hair': {'color': 'white'}}
+        assert rs.evaluate('It was a $dog.hair.color dog.', {'dog': dog}) == 'It was a white dog.'
+        assert rs.evaluate('It was a $dog.color.toUpperCase() dog.', {'dog': dog}) == 'It was a WHITE dog.'
+
+    def test_resolves_member_functions(self, rs):
+        dog = {'name': 'Spot', 'getColor': lambda: 'red'}
+        assert rs.evaluate('$dog.name was a $dog.getColor() dog.', {'dog': dog}) == 'Spot was a red dog.'
+        assert rs.evaluate('$dog.name was a $dog.getColor dog.', {'dog': dog}) == 'Spot was a red dog.'
+
+    def test_resolves_transforms_ending_with_punc(self, rs):
+        assert rs.evaluate('[a | b].toUpperCase().') in ['A.', 'B.']
+        assert rs.evaluate('The [boy | boy].toUpperCase()!') == 'The BOY!'
+        assert rs.evaluate('The $dog.toUpperCase()?', {'dog': 'spot'}) == 'The SPOT?'
+
+        dog = {'name': 'spot', 'color': 'white', 'hair': {'color': 'white'}}
+        assert rs.evaluate('It was $dog.hair.color.', {'dog': dog}) == 'It was white.'
+
+        col = {'getColor': lambda: 'red'}
+        assert rs.evaluate('It was $dog.getColor()?', {'dog': col}) == 'It was red?'
+        assert rs.evaluate('It was $dog.getColor.', {'dog': col}) == 'It was red.'
+
+    def test_nested_context(self, rs):
+        assert rs.evaluate('#foo=$bar.color\n$foo', {'bar': {'color': 'blue'}}) == 'blue'
+
+    def test_functions_on_context_props(self, rs):
+        s = '$player.name.toUpperCase().toLowerCase()'
+        assert rs.evaluate(s, {'player': {'name': 'Wing'}}) == 'wing'
+
+        ctx = {'bar': {'baz': 'result'}}
+        assert rs.evaluate('$foo=$bar.baz\n$foo', ctx) == 'result'
+
+
+# ── Entities ──────────────────────────────────────────────────────────────────
+
+class TestEntities:
+    def test_escaped_chars(self, rs):
+        assert rs.evaluate('The (word) has parens') == 'The (word) has parens'
+        assert rs.evaluate('The [word] has parens') == 'The word has parens'
+        assert rs.evaluate('The reference&lpar;1&rpar; has parens') == 'The reference(1) has parens'
+        assert rs.evaluate('The &lsqb;word&rsqb; has brackets') == 'The [word] has brackets'
+        assert rs.evaluate('The & is an ampersand') == 'The & is an ampersand'
+        assert rs.evaluate('The # is a hash') == 'The # is a hash'
+
+    def test_emojis(self, rs):
+        assert rs.evaluate('The 👍 is thumbs up') == 'The 👍 is thumbs up'
+
+    def test_html_entities(self, rs):
+        assert rs.evaluate('The &#010; line break entity') == 'The \n line break entity'
+        assert rs.evaluate('The &#35; symbol') == 'The # symbol'
+        assert rs.evaluate('The &nbsp; dog') == 'The \u00a0 dog'
+
+        for e in ['&lsqb;', '&lbrack;', '&#91;']:
+            assert rs.evaluate(f'The {e} symbol') == 'The [ symbol'
+        for e in ['&rsqb;', '&rbrack;', '&#93;']:
+            assert rs.evaluate(f'The {e} symbol') == 'The ] symbol'
+        for e in ['&lpar;', '&#40;']:
+            assert rs.evaluate(f'The {e} symbol') == 'The ( symbol'
+        for e in ['&rpar;', '&#41;']:
+            assert rs.evaluate(f'The {e} symbol') == 'The ) symbol'
+
+    def test_basic_punctuation(self, rs):
+        assert rs.evaluate("The -;:.!?'`") == "The -;:.!?'`"
+        assert rs.evaluate('*%©') == '*%©'
+
+    def test_dollar_sign_entities(self, rs):
+        assert rs.evaluate('This is &#36;') == 'This is $'
+
+    def test_continuations(self, rs):
+        assert rs.evaluate('~\n') == ''
+        assert rs.evaluate('aa~\nbb') == 'aabb'
+        assert rs.evaluate('aa~\n~\n[bb].uc') == 'aaBB'
+
+    def test_line_comments(self, rs):
+        assert rs.evaluate('// $foo=a') == ''
+        assert rs.evaluate('// hello') == ''
+        assert rs.evaluate('hello\n//hello') == 'hello'
+        assert rs.evaluate('//hello\nhello') == 'hello'
+        assert rs.evaluate('//hello\nhello\n//hello') == 'hello'
+
+    def test_block_comments(self, rs):
+        assert rs.evaluate('/* hello */') == ''
+        assert rs.evaluate('a /* $foo=a */b') == 'a b'
+        assert rs.evaluate('a/* $foo=a */b') == 'ab'
+        assert rs.evaluate('a/* $foo=a */b/* $foo=a */c') == 'abc'
+
+
+# ── Helpers ───────────────────────────────────────────────────────────────────
+
+class TestHelpers:
+    def test_string_hash(self):
+        assert str(_string_hash('revenue')) == '1099842588'
+
+    def test_pre_parse_lines(self, rs):
+        assert rs.pre_parse('a (1) ') == 'a ^1^ '
+        assert rs.pre_parse('a (foo) ') == 'a (foo) '
+        assert rs.pre_parse('foo=a') == 'foo=a'
+        assert rs.pre_parse('$foo=a') == '{$foo=a}'
+        assert rs.pre_parse('$foo=a\nb') == '{$foo=a}b'
+        assert rs.pre_parse('hello\n$foo=a') == 'hello\n{$foo=a}'
+        assert rs.pre_parse('$foo=a\nb\n$foo') == '{$foo=a}b\n$foo'
+        assert rs.pre_parse('$foo=[cat\ndog]\n$foo') == '{$foo=[cat\ndog]}$foo'
+        assert rs.pre_parse('$foo=[cat\ndog].uc()\n$foo') == '{$foo=[cat\ndog].uc()}$foo'
+
+    def test_parse_jsol_regex(self, rs):
+        res = rs.parse_jsol('{a: /^p/}')
+        assert 'a' in res
+
+    def test_parse_jsol_strings(self, rs):
+        assert rs.parse_jsol("{a: 'hello'}") == {'a': 'hello'}
+        assert rs.parse_jsol('{a: "hello"}') == {'a': 'hello'}
+
+    def test_parse_jsol(self, rs):
+        assert rs.parse_jsol('{a: 3}') == {'a': 3}
+        assert rs.parse_jsol('{a: "3"}') == {'a': '3'}
+        assert rs.parse_jsol("{a: '3'}") == {'a': '3'}
+
+    def test_is_parseable(self, rs):
+        assert not rs.is_parseable('(')
+        assert rs.is_parseable('[')
+        assert rs.is_parseable('{')
+        assert rs.is_parseable('[A | B]')
+        assert rs.is_parseable('$hello')
+        assert rs.is_parseable('$b')
+        assert rs.is_parseable('#b')
+        assert not rs.is_parseable('Hello')
+        assert not rs.is_parseable('&nbsp;')
+        assert rs.is_parseable('@{')
+
+
+# ── Additional tests ported from riscript.tests.js ───────────────────────────
+
+class TestAdditional:
+
+    def test_handles_abbreviations(self, rs):
+        assert rs.evaluate('The C.D failed') == 'The C.D failed'
+        assert rs.evaluate('The $C.D failed', {'C': 'C', 'D': lambda s: s.lower()}) == 'The c failed'
+
+    def test_resolves_recursive_dynamics(self, rs):
+        ctx = {'a': '$b', 'b': '[c | c]'}
+        assert rs.evaluate('#k=$a\n$k', ctx) == 'c'
+
+        ctx = {'a': '$b', 'b': '[c | c]'}
+        assert rs.evaluate('#s = $a\n#a = $b\n#c = $d\n#d = c\n$s', ctx) == 'c'
+
+    def test_handles_generated_transforms(self, rs):
+        sc = '$an() $[a|b]'
+        res = rs.evaluate(sc, {'an': lambda: 'An', 'a': lambda: 'Ant', 'b': lambda: 'Elk'})
+        assert res in ['An Ant', 'An Elk']
+
+    def test_resolves_transforms_in_context(self, rs):
+        ctx = {'capB': lambda s=None: s or 'B'}
+        assert rs.evaluate('[c].capB()', ctx) == 'c'
+
+    def test_resolves_custom_transforms(self, rs):
+        Blah = lambda s=None: 'Blah'
+        assert rs.evaluate('That is [ant].Blah().', {'Blah': Blah}) == 'That is Blah.'
+        ctx = {'Blah2': lambda s=None: 'Blah2'}
+        assert rs.evaluate('That is [ant].Blah2().', ctx) == 'That is Blah2.'
+        rs.transforms['Blah3'] = lambda s=None: 'Blah3'
+        assert rs.evaluate('That is [ant].Blah3().') == 'That is Blah3.'
+        assert rs.evaluate('That is [ant].Blah3.') == 'That is Blah3.'  # no parens
+        del rs.transforms['Blah3']
+
+    def test_resolves_functions_on_context_props_with_transforms(self, rs):
+        s = '$player.name.toUpperCase().toLowerCase()'
+        assert rs.evaluate(s, {'player': {'name': 'Wing'}}) == 'wing'
+
+        ctx = {'bar': {'baz': 'result'}}
+        assert rs.evaluate('$foo=$bar.baz\n$foo', ctx) == 'result'
+
+    def test_resolves_properties_of_context_symbols(self, rs):
+        assert rs.evaluate('$player.name', {'player': {'name': 'Wing'}}) == 'Wing'
+
+        import datetime
+        gameState = {
+            'player': {'name': 'Wing'},
+            'time': {'secs': lambda: datetime.datetime.now().second}
+        }
+        res = rs.evaluate('$player.name has $time.secs() secs left.', gameState)
+        assert re.match(r'Wing has \d{1,2} secs left\.', res)
+
+    def test_resolves_property_transforms_in_context(self, rs):
+        ctx = {'bar': {'result': 'result'}}
+        assert rs.evaluate('$foo=$bar.result\n$foo', ctx) == 'result'
+
+    def test_resolves_transform_props_and_method(self, rs):
+        class TestClass:
+            def __init__(self):
+                self.prop = 'result'
+            def get_prop(self):
+                return self.prop
+            getProp = get_prop
+
+        ctx = {'bar': TestClass()}
+        assert rs.evaluate('$foo=$bar.prop\n$foo', ctx) == 'result'
+        assert rs.evaluate('$foo=$bar.getProp()\n$foo', ctx) == 'result'
+        assert rs.evaluate('$foo=$bar.getProp\n$foo', ctx) == 'result'
+
+    def test_decodes_escaped_chars(self, rs):
+        assert rs.evaluate('The reference\\(1\\) has parens') == 'The reference(1) has parens'
+        assert rs.evaluate('The \\[word\\] has brackets') == 'The [word] has brackets'
+
+    def test_decodes_escaped_chars_in_choices(self, rs):
+        assert rs.evaluate('The [\\(word\\) | \\(word\\)] has parens') == 'The (word) has parens'
+        assert rs.evaluate('The [\\[word\\] | \\[word\\]] has brackets') == 'The [word] has brackets'
+
+    def test_allows_html_entities_in_context(self, rs):
+        assert rs.evaluate('This is $dollar.', {'dollar': '&#36;'}) == 'This is $.'
+        assert rs.evaluate('This is a $diamond.', {'diamond': '&lt;&gt;'}) == 'This is a <>.'
+
+    def test_recognizes_continuations_orig(self, rs):
+        # JS \ line continuation: 'aa\<newline>bb' === 'aabb'
+        assert rs.evaluate('aa\\\nbb') == 'aabb'
+        assert rs.evaluate('aa\\\n[bb].uc') == 'aaBB'
+        assert rs.evaluate('aa\\\n bb') == 'aa bb'
+        assert rs.evaluate('aa \\\nbb') == 'aa bb'
+        assert rs.evaluate('aa \\\n bb') == 'aa  bb'
+
+    def test_extended_parse_jsol(self, rs):
+        assert rs.parse_jsol('{$a: 3}') == {'$a': 3}
+        assert rs.parse_jsol('{a: "3"}') == {'a': '3'}
+        assert rs.parse_jsol('{$a: "3"}') == {'$a': '3'}
+        assert rs.parse_jsol("{a: '3'}") == {'a': '3'}
+        assert rs.parse_jsol("{$a: '3'}") == {'$a': '3'}
+        assert rs.parse_jsol('{$a: {"@gt": 3}}') == {'$a': {'@gt': 3}}
+        assert rs.parse_jsol('{$a: {"@gt":25, "@lt":32}}') == {'$a': {'@gt': 25, '@lt': 32}}
+        import json
+        res = rs.parse_jsol('{"@or": [ {a: {"@gt": 30}}, {a: {"@lt": 20}}]}')
+        assert res == {'@or': [{'a': {'@gt': 30}}, {'a': {'@lt': 20}}]}
+
+    def test_extended_is_parseable(self, rs):
+        assert rs.is_parseable('{A | B}')
+        assert rs.is_parseable('[$b]')
+        assert rs.is_parseable('[&nbsp;]')
+        assert rs.is_parseable('@@1234567890')
+        assert not rs.is_parseable('&181;')
+        assert not rs.is_parseable('&b')
+        assert not rs.is_parseable('&&b')
+        assert rs.is_parseable('@ {')
+        assert not rs.is_parseable('@')
+        assert not rs.is_parseable('@name')
+
+    def test_resolves_choices_in_expressions_extended(self, rs):
+        assert rs.evaluate('This is \\(a parenthesed\\) expression') == 'This is (a parenthesed) expression'
+        assert rs.evaluate('This is &lpar;a parenthesed&rpar; expression') == 'This is (a parenthesed) expression'
+        assert rs.evaluate('[\\(word\\) | \\(word\\)] has parens') == '(word) has parens'
+        res = rs.evaluate('[[mountain | mountain] village | [evening | evening] sunlight | [winter | winter] flower | [star | star]light above]')
+        assert res in ['mountain village', 'evening sunlight', 'winter flower', 'starlight above']
+
+    def test_resolves_transformed_choices_extended(self, rs):
+        res = rs.evaluate('$mammal=[dog | dog]\n$mammal.pluralize.ucf are unruly, but my $mammal is the best.')
+        assert res == 'Dogs are unruly, but my dog is the best.'
+
+
+# ── Missing evaluate-behaviour tests ─────────────────────────────────────────
+
+class TestMissingBehaviour:
+
+    def test_deferred_complex_boolean_gate_logic(self, rs):
+        # AND plus OR — context passed as dict (deferred variant from JS)
+        q = '{ $a: 3, @or: [ { $b: { @lt: 30 } }, { $c: /^p*/ } ] }'
+        assert rs.evaluate(f'[ @{q} hello]', {'a': 27, 'b': 10, 'c': 'pants'}) == ''
+        assert rs.evaluate(f'[ @{q} hello]', {'a': 3,  'b': 10, 'c': 'ants'}) == 'hello'
+        assert rs.evaluate(f'[ @{q} hello]', {'a': 3,  'b': 5,  'c': 'pants'}) == 'hello'
+
+        # AND plus OR with string literal instead of regex
+        q2 = '{ $a: 3, @or: [ { $b: { @lt: 30 } }, { $c: "pants" } ] }'
+        assert rs.evaluate(f'[ @{q2} hello]', {'a': 27, 'b': 30, 'c': 'pants'}) == ''
+        assert rs.evaluate(f'[ @{q2} hello]', {'a': 3,  'b': 30, 'c': 'pants'}) == 'hello'
+        assert rs.evaluate(f'[ @{q2} hello]', {'a': 3,  'b': 10, 'c': 'ants'}) == 'hello'
+        assert rs.evaluate(f'[ @{q2} hello]', {'a': 3,  'b': 30, 'c': 'ants'}) == ''
+        assert rs.evaluate(f'[ @{q2} hello]', {'a': 3,  'b': 5,  'c': 'pants'}) == 'hello'
+
+    def test_deferred_gates_extra(self, rs):
+        # inline assignment then gate check (forms not covered in test_deferred_gates)
+        assert rs.evaluate('[ @{ $a: { @exists: true }} dynamic]\n[$a=apogee]') == 'dynamic\napogee'
+        assert rs.evaluate('[ @{ $a: { @exists: true }} static]\n{#a=apogee}') == 'static'
+        assert rs.evaluate('[ @{ $a: { @exists: true }} static]\n[#a=apogee]') == 'static\napogee'
+
+    def test_spaces_for_formatting(self, rs):
+        assert rs.evaluate('&nbsp;The dog&nbsp;') == '\u00a0The dog\u00a0'
+        assert rs.evaluate('The &nbsp;dog') == 'The \u00a0dog'
+        assert rs.evaluate('The&nbsp; dog') == 'The\u00a0 dog'
+        assert rs.evaluate('The &nbsp; dog') == 'The \u00a0 dog'
+
+    def test_dollar_hex_entity(self, rs):
+        assert rs.evaluate('This is &#x00024;') == 'This is $'
+        assert rs.evaluate('This is &#36;') == 'This is $'
