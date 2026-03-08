@@ -1,6 +1,9 @@
 # rita-py
 Python port of RiTa
 
+# Status
+In-progress, currently supports on RiScript subset
+
 ## Installation
 
 Clone the repo and install dependencies:
