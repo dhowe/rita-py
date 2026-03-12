@@ -13,8 +13,6 @@ source .venv/bin/activate
 pip install pytest
 ```
 
-> On Windows, activate with `.venv\Scripts\activate` instead.
-
 ## Running the Tests
 
 Make sure your virtual environment is active (`source .venv/bin/activate`), then:
@@ -37,10 +35,4 @@ Run a specific test class or method:
 ```bash
 pytest test_riscript.py::TestGates
 pytest test_riscript.py::TestGates::test_else_gates
-```
-
-Run with verbose output:
-
-```bash
-pytest -v
 ```

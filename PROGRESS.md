@@ -1,6 +1,4 @@
-# RiTa Python Port - Phase 1 Complete
-
-## Completed Modules
+# RiTa Python Port
 
 ### util.py (~250 lines)
 - ✅ RE class for regex-based word transformations
@@ -22,7 +20,7 @@
 - ✅ ndist() - normalize weights to probabilities (with optional softmax)
 - ✅ random_bias() - biased random values centered around target
 
-### test_util.py (~440 lines) **[PORTED FROM RITAJS]**
+### test_util.py (~440 lines)
 - ✅ Complete test coverage for RE class
 - ✅ Tests for all Util methods
 - ✅ Syllable operation tests (from analyzer-tests.js)
@@ -30,7 +28,7 @@
 - ✅ Tests for number mappings
 - ✅ Edge cases and error conditions
 
-### test_randgen.py (~440 lines) **[PORTED FROM RITAJS]**
+### test_randgen.py (~440 lines) 
 - ✅ Reproducibility tests
 - ✅ Tests for all random() variants (from rita-tests.js)
 - ✅ Shuffle and random_ordering tests
@@ -43,16 +41,3 @@
 - Behavioral parity with ritajs verified
 - Edge cases covered
 - No dependencies on pytest (can run with stdlib)
-
-## Commits
-- `14a3520` - feat: Add util and randgen modules (Phase 1)
-- `d49e7bd` - test: Port comprehensive tests from ritajs
-
-## Next Steps (Phase 2)
-1. **tokenizer.py** - Sentence splitting, word tokenization
-2. **stemmer.py** - Porter stemmer algorithm
-3. **inflector.py** - Pluralization, singularization
-
-**Note:** Phase 1 now includes proper test porting from ritajs (not just smoke tests)
-
-Total Phase 1 effort: ~2 days (including comprehensive test porting)
