@@ -1,5 +1,5 @@
 # rita-py
-Python port of RiTa
+Python port of RiTa (in-progress)
 
 ## Installation
 
