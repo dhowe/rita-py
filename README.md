@@ -13,17 +13,17 @@ source .venv/bin/activate
 pip install pytest
 ```
 
-## Running the Tests
+## Run the tests
 
-Make sure your virtual environment is active (`source .venv/bin/activate`), then:
+Activate your virtual environment (`source .venv/bin/activate`), then:
 
-Run all tests:
+Run tests:
 
 ```bash
 pytest
 ```
 
-Run a specific test file:
+Run one test file:
 
 ```bash
 pytest test_riscript.py
