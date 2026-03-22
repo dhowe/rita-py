@@ -252,7 +252,6 @@ class Parser:
             txs.append(self.consume(TK_TRANSFORM).value)
         return txs
 
-
 def parse(text):
     """Tokenize and parse a RiScript string, returning an AST."""
     tokens = tokenize(text)
@@ -420,8 +419,22 @@ def parse_jsol(text):
 def _eval_gate(condition_obj, context):
     """Evaluate a mingo-style query object against context dict."""
     import json
-    # normalize @ -> $ for mingo operators (parse_jsol may return @ prefixes)
-    condition_obj = json.loads(json.dumps(condition_obj).replace('"@', '"$').replace('"@', '"$'))
+
+    def _normalize_keys(obj):
+        """Recursively convert @op to $op in dict keys."""
+        if isinstance(obj, dict):
+            result = {}
+            for k, v in obj.items():
+                norm_key = k.replace('@', '$')
+                norm_val = _normalize_keys(v)
+                result[norm_key] = norm_val
+            return result
+        elif isinstance(obj, list):
+            return [_normalize_keys(item) for item in obj]
+        else:
+            return obj
+
+    condition_obj = _normalize_keys(condition_obj)
 
     def _test_value(doc_val, cond):
         if isinstance(cond, dict):
@@ -472,7 +485,9 @@ def _eval_gate(condition_obj, context):
             elif key == '$nor':
                 if any(_test(doc, c) for c in cond): return False
             else:
-                doc_val = doc.get(key)
+                # Strip $ prefix from key to match context keys
+                lookup_key = key.lstrip('$')
+                doc_val = doc.get(lookup_key)
                 if not _test_value(doc_val, cond): return False
         return True
 
@@ -496,7 +511,8 @@ def _get_operands(condition_obj):
         elif isinstance(obj, list):
             for item in obj:
                 stack.append(item)
-    return list(keys)
+    # Strip $ prefix to match JS behavior
+    return [k.lstrip('$') for k in keys]
 
 # ── Evaluator ────────────────────────────────────────────────────────────────
 
@@ -1066,7 +1082,6 @@ class EvalVisitor:
         """Rough text representation of a node for hashing."""
         return repr(node)
 
-
 # ── Public API ────────────────────────────────────────────────────────────────
 
 class RiScript:
@@ -1151,12 +1166,106 @@ class RiScript:
     def string_hash(s):
         return str(_string_hash(s))
 
+    @staticmethod
+    def lex(script, opts=None):
+        """Lex a RiScript string into tokens.
+
+        Args:
+            script: The RiScript source string to tokenize, OR a dict with 'input' key.
+            opts: Optional dict with 'traceLex' to enable tracing.
+
+        Returns:
+            If script is a string: List of Token objects.
+            If script is a dict: Same dict with 'tokens' key added.
+        """
+        if isinstance(script, dict):
+            # JS-style: pass config object, get it back with tokens added
+            script_input = script.get('input', '')
+            result = tokenize(script_input)
+            script['tokens'] = list(result)
+            if script.get('traceLex'):
+                for token in result:
+                    print(f"{token.type}: '{token.value}'")
+            return script
+        else:
+            result = list(tokenize(script))
+            if opts and opts.get('traceLex'):
+                for token in result:
+                    print(f"{token.type}: '{token.value}'")
+            return result
+
+    # RiTa compatibility - add standard RiTa methods
+    VERSION = "3.0.0"
+
+    # Question detection - list of question starters
+    QUESTIONS = ['what', 'how', 'when', 'where', 'why', 'who', 'which', 'whose', 'whom',
+                'do', 'does', 'did', 'is', 'are', 'was', 'were', 'be', 'been', 'being',
+                'have', 'has', 'had', 'has', 'can', 'could', 'will', 'would', 'shall',
+                'should', 'may', 'might', 'must', 'need', 'dare', 'ought', 'used']
+
+    VOWELS = 'aeiou'
+    STOP_WORDS = ['the', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of',
+                 'a', 'an', 'is', 'are', 'was', 'were', 'be', 'been', 'being',
+                 'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would',
+                 'could', 'should', 'may', 'might', 'must', 'shall', 'can',
+                 'this', 'that', 'these', 'those', 'i', 'you', 'he', 'she',
+                 'it', 'we', 'they', 'what', 'which', 'who', 'whom', 'whose']
+
     @property
     def transforms(self):
         """Return a mutable dict merging DEFAULT_TRANSFORMS + extra_transforms."""
         combined = dict(DEFAULT_TRANSFORMS)
         combined.update(self.extra_transforms)
         return _TransformProxy(self.extra_transforms, combined)
+
+    @staticmethod
+    def isQuestion(sentence):
+        """Check if sentence is a question"""
+        if not sentence:
+            return False
+        tokens = RiScript.tokenize(sentence)
+        if tokens:
+            first = tokens[0].lower()
+            return first in RiScript.QUESTIONS or first == '?'
+        return False
+
+    @staticmethod
+    def isAbbrev(input):
+        """Check if text is an abbreviation"""
+        if not input or not isinstance(input, str):
+            return False
+        # Simple check: ends with period and has multiple capital letters or is short
+        return input.endswith('.') and (len(input) < 10 or any(c.isupper() for c in input[1:-1]))
+
+    @staticmethod
+    def isPunct(text):
+        """Check if text is punctuation"""
+        if not text or not isinstance(text, str):
+            return False
+        return len(text) == 1 and not text.isalnum()
+
+    @staticmethod
+    def isStopWord(word):
+        """Check if word is a stop word"""
+        if not word or not isinstance(word, str):
+            return False
+        return word.lower() in RiScript.STOP_WORDS
+
+    @staticmethod
+    def addTransform(name, fn):
+        """Add a transform function to RiScript"""
+        RiScript.transforms[name] = fn
+
+    @staticmethod
+    def removeTransform(name):
+        """Remove a transform function from RiScript"""
+        if name in DEFAULT_TRANSFORMS or name in RiScript.transforms:
+            RiScript.transforms.pop(name, None)
+
+    @staticmethod
+    def getTransforms():
+        """Get list of transform names"""
+        return list(DEFAULT_TRANSFORMS.keys())
 
     def _evaluate(self, input, visitor=None):
         """Low-level evaluate with a pre-configured visitor."""
@@ -1211,7 +1320,6 @@ class RiScript:
     # Expose Visitor class
     Visitor = EvalVisitor
 
-
 class _TransformProxy(dict):
     """A dict proxy that writes through to the backing store."""
     def __init__(self, backing, combined):
@@ -1225,7 +1333,6 @@ class _TransformProxy(dict):
     def __delitem__(self, key):
         super().pop(key, None)
         self._backing.pop(key, None)
-
 
 # ── RiGrammar ─────────────────────────────────────────────────────────────────
 
@@ -1413,3 +1520,6 @@ class RiGrammar:
             raise ValueError(
                 'RiGrammar appears to be invalid JSON, please check it at http://jsonlint.com/\n' + s
             )
+
+# Add lex method to RiScript class at the end of the file
+# (will be appended via separate edit)

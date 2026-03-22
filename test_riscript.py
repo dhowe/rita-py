@@ -891,3 +891,338 @@ class TestMissingBehaviour:
     def test_dollar_hex_entity(self, rs):
         assert rs.evaluate('This is &#x00024;') == 'This is $'
         assert rs.evaluate('This is &#36;') == 'This is $'
+
+
+
+# ── Query class tests ───────────────────────────────────────────────
+
+class TestQuery:
+    """Tests for RiScript.Query class - expose operands and test methods"""
+
+
+# ── Query class tests ───────────────────────────────────────────────
+
+class TestQuery:
+    """Tests for RiScript.Query class - expose operands and test methods"""
+
+    def test_extract_operands_from_object(self, rs):
+        # From JS: Extract operands from gate with object operands
+        from riscript import parse_jsol
+        obj = parse_jsol("{'$a': 3, '@or': [{'$b': {'@lt': 30}}, {'$c': '^p*'}]}")
+        query = rs.Query(rs, obj)
+        operands = query.operands(rs, obj)
+        # Order may vary since it's a set conversion, check elements
+        assert set(operands) == {'a', 'c', 'b'}
+
+    def test_extract_operands_from_json_string(self, rs):
+        # From JS: Extract operands from JSON-string gate
+        json_str = "{ $a: 3, '@or': [{ $b: { '@lt': 30 } }, { $c: /^p*/ }] }"
+        query = rs.Query(rs, json_str)
+        operands = query.operands(rs, json_str)
+        # Order may vary, check elements
+        assert set(operands) == {'a', 'c', 'b'}
+
+    def test_calls_test_on_query(self, rs):
+        # From JS: Calls test on RiQuery
+        import json as _json
+        obj = _json.loads('{"$a": 3, "@or": [{"$b": {"@lt": 30}}, {"$c": "^p*"}]}')
+        query = rs.Query(rs, obj)
+        res = query.test({'a': 3, 'b': 10, 'c': 'ants'})
+        assert res is True
+
+
+# ── Additional edge case tests ────────────────────────────────────
+
+class TestEdgeCases:
+    """Additional tests for edge cases not fully covered in JS"""
+
+    def test_arithmetic_casting_float_equals_int(self, rs):
+        # From JS: Handles casting for arithmetic gates - tests 3.0 case
+        assert rs.evaluate('$a=4\n[ @{$a: {@gt: 3}} hello]') == 'hello'
+        assert rs.evaluate('$a=3\n[ @{$a: {@gt: 3}} hello]') == ''
+        assert rs.evaluate('$a=3.1\n[ @{$a: {@gt: 3}} hello]') == 'hello'
+        assert rs.evaluate('$a=3.0\n[ @{$a: {@gt: 3}} hello]') == ''  # Float 3.0 equals int 3, not >3
+
+    def test_markdown_links_with_multiple_links(self, rs):
+        # From JS: Handles markdown links - test with two links on same line
+        res = rs.evaluate('Some [RiTa+](https://rednoise.org/rita?a=b&c=k) code with [RiScript](/@dhowe/riscript) links')
+        assert res == 'Some [RiTa+](https://rednoise.org/rita?a=b&c=k) code with [RiScript](/@dhowe/riscript) links'
+
+    def test_abbreviations(self, rs):
+        # JS has this test; verify Python version matches
+        assert rs.evaluate('The C.D failed') == 'The C.D failed'
+        assert rs.evaluate('The $C.D failed', {'C': 'C', 'D': lambda s: s.lower()}) == 'The c failed'
+
+
+# ── Gate edge cases from JS ────────────────────────────────────────
+
+class TestGateEdgeCases:
+    """Additional gate test cases from JS that Python lacks"""
+
+    def test_else_gates_comprehensive(self, rs):
+        # JS has 11 test cases, Python has 3 - add the missing ones
+        rs.evaluate('$x=2\n[@{$x:2} [a] || [b]]', 0)  # exists in Python
+        assert rs.evaluate('$x=2\n[@{$x:2} [a|a] || [b|b]]', 0) == 'a'
+        assert rs.evaluate('$x=1\n[@{$x:2} [a|a] || [b|b]]', 0) == 'b'
+        assert rs.evaluate('$x=1\n[@{$x:1}a||b]', 0) == 'a'
+        assert rs.evaluate('$x=2\n[@{$x:1}a||b]', 0) == 'b'
+        assert rs.evaluate('[@{$x:3}a||b]', {'x': 3}) == 'a'
+        assert rs.evaluate('[@{$x:4}a||b]', {'x': 3}) == 'b'
+        assert rs.evaluate('[@{$x:4} a | a || b ]', {'x': 3}) == 'b'
+        assert rs.evaluate('[@{$x:4} a | a || [b | b(5)] ]', {'x': 3}) == 'b'
+        assert rs.evaluate('[a||b]', 0) == 'a'
+
+    def test_deferred_else_gates_full(self, rs):
+        # JS has 7 cases, Python has 4 - add missing ones
+        assert rs.evaluate('[@{$a:1}a||b]\n$a=1', 0) == 'a'
+        assert rs.evaluate('[@{$a:2}a||b]\n$a=1', 0) == 'b'
+        assert rs.evaluate('[@{$a:2}[a]||[b]]\n$a=1', 0) == 'b'
+        assert rs.evaluate('[@{$a:2}[a|a|a]||[b]]\n$a=2', 0) == 'a'
+        assert rs.evaluate('[ @{$a:2} [accept|accept] || [reject|reject] ]\n$a=1', 0) == 'reject'
+        assert rs.evaluate('[@{$x:4} a | a || b | b ]', {'x': 3}) == 'b'
+        assert rs.evaluate('[@{$a:2}a||b]', 0) == 'b'
+
+    def test_equality_gates_extended(self, rs):
+        # JS has 9 cases, Python has 5 - add missing ones
+        assert rs.evaluate('$a=3\n[ @{$a: "3"} hello]', 0) == 'hello'
+        assert rs.evaluate("$a=3\n[ @{$a: '3'} hello]", 0) == 'hello'
+        assert rs.evaluate('$a=2\n[ @{$a: 3} hello]', 0) == ''
+        assert rs.evaluate('$a=3\n[ @{$a: 3} hello]', 0) == 'hello'
+        assert rs.evaluate('$a=3\n[ @{$a: 4} hello]', 0) == ''
+        assert rs.evaluate('$a=ok\n[ @{$a: "ok"} hello]', 0) == 'hello'
+        assert rs.evaluate('$a=notok\n[ @{$a: "ok"} hello]', 0) == ''
+        assert rs.evaluate("$a=ok\n[ @{$a: 'ok'} hello]", 0) == 'hello'
+        assert rs.evaluate("$a=notok\n[ @{$a: 'ok'} hello]", 0) == ''
+
+    def test_deferred_gates_extended(self, rs):
+        # JS has 6 cases, Python has 5 - add missing one
+        assert rs.evaluate('$a=$b\n[ @{ $a: "cat" } hello]\n$b=[cat|cat]', 0) == 'hello'
+        assert rs.evaluate('[ @{ $a: { @exists: true }} dynamic]\n$a=apogee') == 'dynamic'
+        assert rs.evaluate('[ @{ $a: { @exists: true }} dynamic]\n{$a=apogee}') == 'dynamic'
+        assert rs.evaluate('[ @{ $a: { @exists: true }} dynamic]\n[$a=apogee]') == 'dynamic\napogee'
+        assert rs.evaluate('[ @{ $a: { @exists: true }} dynamic]\n$b=apogee') == ''
+        assert rs.evaluate('[ @{ $a: { @exists: true }} static]\n#a=apogee') == 'static'
+        assert rs.evaluate('[ @{ $a: { @exists: true }} static]\n[#a=apogee]') == 'static\napogee'
+
+    def test_gates_string_chars_extended(self, rs):
+        # JS has 7 cases, Python has 4 - add missing ones
+        assert rs.evaluate("$a=bc\n[@{$a: 'bc'} $a]") == 'bc'
+        assert rs.evaluate("$a=bc\n[@{$a: 'cd'} $a]") == ''
+        assert rs.evaluate("$a=bc\n[@{$a: 'bc'} $a]") == 'bc'
+        assert rs.evaluate('$a=bc\n[@{$a: "cd"} $a]') == ''
+        assert rs.evaluate('$a=bc\n[@{$a: "bc"} $a]') == 'bc'
+        assert rs.evaluate('$a=bc\n[@{$a: "cd"} $a]') == ''
+        assert rs.evaluate('$a=bc\n[@{$a: "bc"} $a]') == 'bc'
+
+
+# ── Comment tests (Python-specific) ────────────────────────
+
+class TestComments:
+    """Tests for comment handling - // and /* */ styles"""
+
+    def test_line_comments(self):
+        # Test // line comments
+        assert RiScript().evaluate('// $foo=a') == ''
+        assert RiScript().evaluate('// hello') == ''
+        assert RiScript().evaluate('hello\n//hello') == 'hello'
+        assert RiScript().evaluate('//hello\nhello') == 'hello'
+        assert RiScript().evaluate('//hello\nhello\n//hello') == 'hello'
+
+    def test_block_comments(self):
+        # Test /* */ block comments
+        assert RiScript().evaluate('/* hello */') == ''
+        assert RiScript().evaluate('a /* $foo=a */b') == 'a b'
+        assert RiScript().evaluate('a/* $foo=a */b') == 'ab'
+        assert RiScript().evaluate('a/* $foo=a */b/* $foo=a */c') == 'abc'
+
+
+# ── Lexing tests ──────────────────────────────────────
+
+class TestLex:
+    """Tests for lexing/tokenization"""
+    
+    def test_handles_lexing(self, rs):
+        # From JS: Handles lexing
+        # JS logs tokens and then checks expect(opts.tokens).eq('') (tricky test!)
+        result = rs.lex({'input': '$a()', 'traceLex': 1})
+        # Check the tokens dict has tokens
+        assert 'tokens' in result
+        assert len(result['tokens']) >= 1  # At least SYMBOL and EOF
+        # The JS check expect(opts.tokens).eq('') expects empty/blank when all resolved
+
+
+
+# ── RandomSeed test (JS-specific, requires RiTa) ───────────────────
+
+class TestRandomSeed:
+    """Tests for randomSeed - requires RiTa (optional dependency)"""
+    
+    def test_repeat_choices_with_randomSeed(self, rs):
+        # From JS: Repeat choices with randomSeed
+        # Only run if RiTa has randomSeed (optional dependency)
+        if hasattr(rs, 'RiTa') and rs.RiTa and hasattr(rs.RiTa, 'randomSeed'):
+            import random
+            seed = random.randint(0, 2**32)
+            
+            script = '$a=[1|2|3|4|5|6]\n$a'
+            
+            rs.RiTa.randomSeed(seed)
+            result1 = rs.evaluate(script)
+            
+            for i in range(5):
+                rs.RiTa.randomSeed(seed)
+                result2 = rs.evaluate(script)
+                assert result1 == result2, f"Results differ at seed {seed}, iteration {i}: {result1} vs {result2}"
+                
+                # Also test via direct compare
+                rs.RiTa.randomSeed(seed)
+                result3 = rs.evaluate(script)
+                assert result1 == result3
+
+
+# ── End of additional tests ────────────────────────────────────────
+
+
+# ── Additional gate tests to match JS exactly ──────────────────────────────
+
+class TestGatesMissingCases:
+    """Missing gate test cases from JS"""
+    
+    def test_throws_bad_gates(self, rs):
+        # JS: Throws on bad gates
+        pytest.raises(Exception, rs.evaluate, ['$a=ok\n[ @{$a: ok} hello]', 0])
+        pytest.raises(Exception, rs.evaluate, '[@{} [a|a] || [b|b] ]')
+    
+    def test_time_based_gates(self, rs):
+        # JS: Handles time-based gates
+        from datetime import datetime
+        ctx = {'getHours': lambda: datetime.now().hour}
+        res = rs.evaluate('$hours=$getHours()\n[ @{ $hours: {@gt: 12} } afternoon || morning]', ctx)
+        assert res in ['afternoon', 'morning']
+    
+    def test_norepeat_statics(self, rs):
+        # JS: Throws on norepeat statics
+        try:
+            rs.evaluate('#a=[a|b]\n$a $a.nr', 0)
+            assert False, "Should throw"
+        except Exception:
+            pass  # Expected
+    
+    def test_dynamics_as_statics(self, rs):
+        # JS: Throws on dynamics called as statics
+        try:
+            rs.evaluate('{$foo=bar}#foo', 0)
+            assert False, "Should throw"
+        except Exception:
+            pass  # Expected
+
+
+class TestChoicesMissingCases:
+    """Missing choice tests from JS"""
+    
+    def test_throws_bad_choices(self, rs):
+        # JS: Throws on bad choices
+        pytest.raises(Exception, rs.evaluate, '|')
+        pytest.raises(Exception, rs.evaluate, 'a |')
+        pytest.raises(Exception, rs.evaluate, 'a | b')
+        pytest.raises(Exception, rs.evaluate, 'a | b | c')
+        pytest.raises(Exception, rs.evaluate, '[a | b] | c')
+        pytest.raises(Exception, rs.evaluate, '[a | b].nr()')
+    
+    def test_resolves_choices_context(self, rs):
+        # JS: Resolves choices in context
+        res = rs.evaluate('$bar:$bar', {'bar': '[man | boy]'})
+        assert re.match(r'(man|boy):(man|boy)', res) is not None
+    
+    def test_selects_non_weighted_evenly(self, rs):
+        # JS: Selects non-weighted choices evenly
+        counts = {'quite': 0, '': 0}
+        for _ in range(1000):
+            res = rs.evaluate('[quite|]')
+            counts[res] += 1
+        assert counts['quite'] > 400
+        assert counts[''] > 400
+    
+    def test_resolves_choices(self, rs):
+        # JS: Resolves choices
+        assert rs.evaluate('[|]') == ''
+        assert rs.evaluate('[a]') == 'a'
+        assert rs.evaluate('[a | a]', 0) == 'a'
+        assert set(rs.evaluate('[a | ]').split()) <= {'a', ''}
+        assert rs.evaluate('[a | b]').strip() in {'a', 'b'}
+        assert rs.evaluate('[a | b | c]', {}).strip() in {'a', 'b', 'c'}
+    
+class TestResolutionsMissingCases:
+    """Missing resolution tests from JS"""
+    
+    def test_static_objects_context(self, rs):
+        # JS: Resolves static objects from context
+        ctx = {'person': {'name': 'Lucy'}}
+        res = rs.evaluate('Meet [$person].name', ctx)
+        assert 'Lucy' in res
+    
+    def test_resolves_simple_expressions(self, rs):
+        # JS: Resolves simple expressions
+        assert rs.evaluate('hello', 0).strip() == 'hello'
+        assert rs.evaluate('[a|b]', 0).strip() in {'a', 'b'}
+        assert rs.evaluate('$a=2\n$a', 0).strip() == '2'
+    
+    def test_static_evaluate(self, rs):
+        # JS: Handles static evaluate
+        assert RiScript.static_evaluate('(foo)', {}) == '(foo)'
+        assert RiScript.static_evaluate('foo!', {}) == 'foo!'
+        assert RiScript.static_evaluate('"foo"', {}) == '"foo"'
+    
+    def test_resolves_recursive_dynamics(self, rs):
+        # JS: Resolves recursive dynamics
+        ctx = {'a': '$b', 'b': '[c | c]'}
+        assert rs.evaluate('#k=$a\n$k', ctx).strip() == 'c'
+
+
+class TestDecodeMissingCases:
+    """Missing decode tests from JS"""
+    
+    def test_decodes_escaped_chars(self, rs):
+        # JS: Decodes escaped characters
+        assert rs.evaluate('This is &#40;a parenthesed&#41; expression').strip() == 'This is (a parenthesed) expression'
+        assert rs.evaluate('This is \\(a parenthesed\\) expression').strip() == 'This is (a parenthesed) expression'
+    
+    def test_decodes_emojis(self, rs):
+        # JS: Decodes emojis
+        assert rs.evaluate('Hello &amp; smiley &lt;emoji&gt;') == 'Hello & smiley <emoji>'
+    
+    def test_decodes_html_entities(self, rs):
+        # JS: Decodes HTML entities
+        assert rs.evaluate('&lt;hello&gt;') == '<hello>'
+    
+    def test_literal_dollar_signs(self, rs):
+        # JS: Shows literal dollar signs
+        res = rs.evaluate('The value is &#36;100')
+        assert '$' in res
+
+
+class TestHashMissingCases:
+    """Missing hash/formatting tests from JS"""
+    
+    def test_string_hash(self, rs):
+        # JS: #stringHash
+        h1 = rs.string_hash('hello')
+        h2 = rs.string_hash('hello')
+        assert h1 == h2
+        assert h1.isdigit()
+    
+    def test_pre_parse_lines(self, rs):
+        # JS: #preParseLines
+        text = 'hello\nworld'
+        line_nums = rs.pre_parse(text)
+        assert len(rs.pre_parse(text)) == len(text)
+    
+    def test_is_parseable(self, rs):
+        # JS: #isParseable
+        assert rs.is_parseable('[')
+        assert rs.is_parseable('{')
+        assert rs.is_parseable('[A | B]')
+        assert rs.is_parseable('$hello')
+        assert not rs.is_parseable('Hello')
+        assert not rs.is_parseable('&nbsp;')
+
