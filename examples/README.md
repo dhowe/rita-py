@@ -1,10 +1,10 @@
 # Examples
 
-This folder contains example programs demonstrating how to use rita-py.
+This folder contains example programs.
 
 ## Example: simple_example.py
 
-A comprehensive example demonstrating all major RiScript features:
+Example demonstrating RiScript features:
 
 - **Basic Choices**: `['option1' | 'option2']` - Random selection from options
 - **Transforms**: `.pluralize()`, `.lower()`, `.articlize()` - Word transformations
@@ -19,10 +19,8 @@ A comprehensive example demonstrating all major RiScript features:
 From the `rita-py` directory:
 
 ```bash
-python3 examples/simple_example.py
+python3 examples/riscript_examples.py
 ```
-
-The example uses proper Python path handling and will work from any location.
 
 ## Quick Usage
 

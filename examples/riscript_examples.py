@@ -1,11 +1,9 @@
 #!/usr/bin/env python3
 """
-Simple example demonstrating rita-py (RiScript) capabilities.
+Simple examples demonstrating RiScript
 
 To run:
-    PYTHONPATH=. python3 examples/simple_example.py
-    or
-    cd /home/dhowe/git/rita-py && PYTHONPATH=. python3 examples/simple_example.py
+    PYTHONPATH=. python3 examples/riscript_examples.py
 """
 import sys
 from pathlib import Path
@@ -22,7 +20,7 @@ def main():
     """Run examples showing RiScript features."""
     
     print("=" * 60)
-    print("RiScript Example - Simple Demo")
+    print("RiScript Example")
     print("=" * 60)
     print()
     
@@ -32,7 +30,7 @@ def main():
     # Example 1: Basic choice selection
     print("1. Basic Choice Selection")
     print("-" * 40)
-    script = '[The quick brown fox | A slow lazy cat] jumps over the dog'
+    script = '[The quick brown fox | A slow lazy cat] jumped over the dog'
     result = rs.evaluate(script)
     print(f"Script:  {script}")
     print(f"Result:  {result}")
@@ -41,7 +39,7 @@ def main():
     # Example 2: Word transformation (pluralize)
     print("2. Word Transformation - pluralize")
     print("-" * 40)
-    script = 'The [ox | ox | ox].pluralize run away'
+    script = 'The [ox | ox].pluralize were drinking.'
     result = rs.evaluate(script)
     print(f"Script:  {script}")
     print(f"Result:  {result}")
@@ -50,7 +48,7 @@ def main():
     # Example 3: Dynamic assignment
     print("3. Dynamic Assignment")
     print("-" * 40)
-    script = '$noun=apple\nI like to eat $noun'
+    script = '$noun=apple\nI would like to eat $noun.articlize().'
     result = rs.evaluate(script)
     print(f"Script:  {script}")
     print(f"Result:  {result}")
@@ -59,7 +57,7 @@ def main():
     # Example 4: Static assignment (compile-time)
     print("4. Static Assignment")
     print("-" * 40)
-    script = '#color=red\nThe $color flower blooms'
+    script = '#color=red\nThe $color flower bloomed.'
     result = rs.evaluate(script)
     print(f"Script:  {script}")
     print(f"Result:  {result}")
@@ -100,7 +98,7 @@ def main():
     print("8. Context with Multiple Variables")
     print("-" * 40)
     context = {'name': 'Alice', 'city': 'New York'}
-    script = '$name from $city smiles'
+    script = '$name from $city smiled.'
     result = rs.evaluate(script, context)
     print(f"Script:  {script}")
     print(f"Context: {context}")
@@ -108,25 +106,14 @@ def main():
     print()
     
     # Example 9: Article generation (an vs a)
-    print("9. Article Generation - articlize()")
+    print("9. Articles, capitilisation and norepeat")
     print("-" * 40)
-    script = '[honor | elephant | ox].articlize()'
+    script = '$noun=[elephant | ox]\n$noun.art.cap(), $noun.nr().art...'
     result = rs.evaluate(script)
     print(f"Script:  {script}")
     print(f"Result:  {result}")
     print()
     
-    # Example 10: Complex multi-pass
-    print("10. Multi-pass Evaluation")
-    print("-" * 40)
-    script = '$noun=[apple|banana]'
-    result = rs.evaluate(script)
-    print(f"Script:  {script}")
-    print(f"Result:  {result}")
-    print()
-    
-    print("=" * 60)
-    print("All examples completed successfully!")
     print("=" * 60)
 
 
