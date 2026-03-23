@@ -22,6 +22,32 @@ source .venv/bin/activate
 
 ## Quick Start
 
+## Examples
+
+Run the included example to see RiScript in action:
+
+```bash
+python3 examples/simple_example.py  # run from project root
+# or: PYTHONPATH=. python3 examples/simple_example.py
+```
+
+See [examples/simple_example.py](examples/simple_example.py) for code demonstrating:
+- Choice selection
+- Word transformations
+- Dynamic and static assignments
+- Gate logic
+- Context variables
+- Multi-pass evaluation
+
+## Quick Start
+```
+
+```python
+from riscript import RiScript
+
+rs = RiScript()
+## Quick Start
+
 ```python
 from riscript import RiScript
 
@@ -29,38 +55,6 @@ rs = RiScript()
 
 # Basic evaluation
 result = rs.evaluate('The [ox | ox | ox].pluralize run', {})
-print(result)  # Output: "The oxen run"
-
-# Using dynamic values
-result = rs.evaluate('The $name went to the store', {'name': 'John'})
-print(result)  # Output: "The John went to the store"
-
-# Gate logic
-result = rs.evaluate('[ @{$age: {@gt: 18} } adult || child ]', {'age': 20})
-print(result)  # Output: "adult"
-
-# Multi-pass evaluation
-result = rs.evaluate('$name=John\nThe $name went home', {})
-print(result)  # Output: "The John went home"
-```
-
-## Running Tests
-
-Activate your virtual environment (`source .venv/bin/activate`), then:
-
-### Run all tests
-
-```bash
-pytest
-```
-
-### Run specific test files
-
-```bash
-pytest test_riscript.py
-pytest test_grammar.py
-pytest test_rita.py
-pytest test_util.py
 pytest test_randgen.py
 ```
 
