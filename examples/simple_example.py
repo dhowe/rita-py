@@ -1,7 +1,20 @@
 #!/usr/bin/env python3
 """
 Simple example demonstrating rita-py (RiScript) capabilities.
+
+To run:
+    PYTHONPATH=. python3 examples/simple_example.py
+    or
+    cd /home/dhowe/git/rita-py && PYTHONPATH=. python3 examples/simple_example.py
 """
+import sys
+from pathlib import Path
+
+# Add parent directory to path for imports
+PROJECT_ROOT = Path(__file__).parent.parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
 from riscript import RiScript
 
 
@@ -13,8 +26,10 @@ def main():
     print("=" * 60)
     print()
     
+    # Initialize RiScript interpreter
     rs = RiScript()
     
+    # Example 1: Basic choice selection
     print("1. Basic Choice Selection")
     print("-" * 40)
     script = '[The quick brown fox | A slow lazy cat] jumps over the dog'
@@ -23,6 +38,7 @@ def main():
     print(f"Result:  {result}")
     print()
     
+    # Example 2: Word transformation (pluralize)
     print("2. Word Transformation - pluralize")
     print("-" * 40)
     script = 'The [ox | ox | ox].pluralize run away'
@@ -31,6 +47,7 @@ def main():
     print(f"Result:  {result}")
     print()
     
+    # Example 3: Dynamic assignment
     print("3. Dynamic Assignment")
     print("-" * 40)
     script = '$noun=apple\nI like to eat $noun'
@@ -39,6 +56,7 @@ def main():
     print(f"Result:  {result}")
     print()
     
+    # Example 4: Static assignment (compile-time)
     print("4. Static Assignment")
     print("-" * 40)
     script = '#color=red\nThe $color flower blooms'
@@ -47,6 +65,7 @@ def main():
     print(f"Result:  {result}")
     print()
     
+    # Example 5: Gate logic - Age check
     print("5. Gate Logic - Age Check")
     print("-" * 40)
     script = '[ @{$age:18} adult || minor ]'
@@ -57,6 +76,7 @@ def main():
     print(f"Result:  {result}")
     print()
     
+    # Example 6: Comparison gate
     print("6. Gate Logic - Hours Check")
     print("-" * 40)
     script = '[ @{$hours:{@lte:12}} morning || afternoon ]'
@@ -67,6 +87,7 @@ def main():
     print(f"Result:  {result}")
     print()
     
+    # Example 7: Transform functions
     print("7. Transform Functions - lower()")
     print("-" * 40)
     script = '[Hello World | Hi There].lower()'
@@ -75,6 +96,7 @@ def main():
     print(f"Result:  {result}")
     print()
     
+    # Example 8: Context with variables
     print("8. Context with Multiple Variables")
     print("-" * 40)
     context = {'name': 'Alice', 'city': 'New York'}
@@ -85,6 +107,7 @@ def main():
     print(f"Result:  {result}")
     print()
     
+    # Example 9: Article generation (an vs a)
     print("9. Article Generation - articlize()")
     print("-" * 40)
     script = '[honor | elephant | ox].articlize()'
@@ -93,6 +116,7 @@ def main():
     print(f"Result:  {result}")
     print()
     
+    # Example 10: Complex multi-pass
     print("10. Multi-pass Evaluation")
     print("-" * 40)
     script = '$noun=[apple|banana]'

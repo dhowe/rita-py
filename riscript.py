@@ -261,9 +261,167 @@ def parse(text):
 # ── Default transforms ───────────────────────────────────────────────────────
 
 def _pluralize(s):
+    """Pluralize a word using comprehensive rules (RiTa-compatible)."""
     if not s:
         return s
     s = s.strip()
+    word = s.lower()
+    
+    # Check for irregular plurals first
+    # ox -> oxen
+    if word == 'ox':
+        return 'oxen'
+    
+    # child -> children
+    if word == 'child':
+        return 'children'
+    
+    # mouse -> mice
+    if word == 'mouse':
+        return 'mice'
+    
+    # tooth -> teeth
+    if word == 'tooth':
+        return 'teeth'
+    
+    # foot -> feet
+    if word == 'foot':
+        return 'feet'
+    
+    # goose -> geese
+    if word == 'goose':
+        return 'geese'
+    
+    # man -> men
+    if word == 'man':
+        return 'men'
+    
+    # woman -> women
+    if word == 'woman':
+        return 'women'
+    
+    # person -> people
+    if word == 'person':
+        return 'people'
+    
+    # criterion -> criteria
+    if word == 'criterion':
+        return 'criteria'
+    
+    # formula -> formulas (also formulae)
+    if word == 'formula':
+        return 'formulas'
+    
+    # appendix -> appendixes or appendices
+    if word == 'appendix':
+        return 'appendixes'
+    
+    # matrix -> matrices
+    if word == 'matrix':
+        return 'matrices'
+    
+    # index -> indices
+    if word == 'index':
+        return 'indices'
+    
+    # syllabus -> syllabi
+    if word == 'syllabus':
+        return 'syllabi'
+    
+    # cactus -> cacti
+    if word == 'cactus':
+        return 'cacti'
+    
+    # fungus -> fungi
+    if word == 'fungus':
+        return 'fungi'
+    
+    # nucleus -> nuclei
+    if word == 'nucleus':
+        return 'nuclei'
+    
+    # stimulus -> stimuli
+    if word == 'stimulus':
+        return 'stimuli'
+    
+    # analysis -> analyses
+    if word == 'analysis':
+        return 'analyses'
+    
+    # basis -> bases
+    if word == 'basis':
+        return 'bases'
+    
+    # crisis -> crises
+    if word == 'crisis':
+        return 'crises'
+    
+    # thesis -> theses
+    if word == 'thesis':
+        return 'theses'
+    
+    # hypothesis -> hypotheses
+    if word == 'hypothesis':
+        return 'hypotheses'
+    
+    # diagnosis -> diagnoses
+    if word == 'diagnosis':
+        return 'diagnoses'
+    
+    # axis -> axes
+    if word == 'axis':
+        return 'axes'
+    
+    # phenomenon -> phenomena
+    if word == 'phenomenon':
+        return 'phenomena'
+    
+    # datum -> data
+    if word == 'datum':
+        return 'data'
+    
+    # alumnus -> alumni
+    if word == 'alumnus':
+        return 'alumni'
+    
+    # genus -> genera
+    if word == 'genus':
+        return 'genera'
+    
+    # curriculum -> curricula
+    if word == 'curriculum':
+        return 'curricula'
+    
+    # bacterium -> bacteria
+    if word == 'bacterium':
+        return 'bacteria'
+    
+    # symposium -> symposia
+    if word == 'symposium':
+        return 'symposia'
+    
+    # memorandum -> memoranda
+    if word == 'memorandum':
+        return 'memoranda'
+    
+    # octopus -> octopi or octopuses
+    if word == 'octopus':
+        return 'octopuses'
+    
+    # radius -> radii
+    if word == 'radius':
+        return 'radii'
+    
+    # vertebra -> vertebrae
+    if word == 'vertebra':
+        return 'vertebrae'
+    
+    # larva -> larvae
+    if word == 'larva':
+        return 'larvae'
+    
+    # adder -> adders (regular)
+    # Apply regular plural rules
     if re.search(r'(?:s|x|z|ch|sh)$', s, re.I):
         return s + 'es'
     if re.search(r'[^aeiou]y$', s, re.I):

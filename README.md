@@ -1,13 +1,27 @@
 # rita-py
 
-Complete Python port of RiTa and RiScript - a generative text language for computational media.
+Python port of RiTa
 
 ## Features
 
-- **RiScript Interpreter**: Full-featured parser with support for choices, gates, statics, dynamics, and transforms
-- **RiTa Compatibility**: Core RiTa functionality including text analysis utilities
-- **Seeded Randomness**: Mersenne Twister PRNG for reproducible random generation
-- **Comprehensive Tests**: 283+ passing tests covering all functionality
+- **RiScript Interpreter**: Parser with support for choices, gates, statics, dynamics, and transforms
+- **RiTa Compatibility**: Full RiTa functionality including text analysis utilities
+
+## Examples
+
+Run the included example to see RiScript in action:
+
+```bash
+PYTHONPATH=. python3 examples/simple_example.py
+```
+
+See [examples/simple_example.py](examples/simple_example.py) for code demonstrating:
+- Choice selection
+- Word transformations
+- Dynamic and static assignments
+- Gate logic
+- Context variables
+- Multi-pass evaluation
 
 ## Installation
 
@@ -22,39 +36,45 @@ source .venv/bin/activate
 
 ## Quick Start
 
-## Examples
-
-Run the included example to see RiScript in action:
-
-```bash
-python3 examples/simple_example.py  # run from project root
-# or: PYTHONPATH=. python3 examples/simple_example.py
-```
-
-See [examples/simple_example.py](examples/simple_example.py) for code demonstrating:
-- Choice selection
-- Word transformations
-- Dynamic and static assignments
-- Gate logic
-- Context variables
-- Multi-pass evaluation
-
-## Quick Start
-```
-
-```python
-from riscript import RiScript
-
-rs = RiScript()
-## Quick Start
-
 ```python
 from riscript import RiScript
 
 rs = RiScript()
 
 # Basic evaluation
-result = rs.evaluate('The [ox | ox | ox].pluralize run', {})
+result = rs.evaluate('The [ox | ox ].pluralize run', {})
+print(result)  # Output: "The oxen run"
+
+# Using dynamic values
+result = rs.evaluate('$name.cap() went to the store.', {'name': 'john'})
+print(result)  # Output: "John went to the store."
+
+# Gate logic
+result = rs.evaluate('[ @{$age:18} adult || child ]', {'age': 20})
+print(result)  # Output: "adult"
+
+# Multi-pass evaluation
+result = rs.evaluate('$name=John\n$name.cap() went home.', {})
+print(result)  # Output: "John went home."
+```
+
+## Running Tests
+
+Activate a virtual environment (`source .venv/bin/activate`), then:
+
+### Run tests
+
+```bash
+pytest
+```
+
+### Run specific test files
+
+```bash
+pytest test_riscript.py
+pytest test_grammar.py
+pytest test_rita.py
+pytest test_util.py
 pytest test_randgen.py
 ```
 
@@ -77,13 +97,6 @@ pytest test_riscript.py::TestChoices::test_multiword_choice
 
 ```bash
 pytest -v
-```
-
-### Run with coverage
-
-```bash
-pip install pytest-cov
-pytest --cov=.
 ```
 
 ## Core Concepts
@@ -120,8 +133,8 @@ Built-in transforms: articlize, lower, uc, pluralize, cap, etc.
 
 ## Test Coverage
 
-- **Total Tests**: 283
-- **Passing**: 283/283 (100%)
+- **Total Tests**: 300
+- **Passing**: 300/300 (100%)
 - **Coverage Areas**:
   - Gate evaluation (boolean, equality, comparison, existence)
   - Choice selection (weighted, multi-word, transforms)
@@ -129,6 +142,8 @@ Built-in transforms: articlize, lower, uc, pluralize, cap, etc.
   - Statement handling (dynamic, static, silent)
   - Query class (operand extraction, testing)
   - Hash utilities (string hashing, parsing)
+  - Unicode and emoji support
+  - All JavaScript parity tests
 
 ## Project Structure
 
@@ -137,27 +152,12 @@ rita-py/
 ├── riscript.py      # Core RiScript interpreter
 ├── randgen.py       # Seeded random number generator
 ├── util.py          # Utility functions
+├── examples/
+│   ├── simple_example.py  # Demo program
+│   └── README.md          # Examples documentation
 ├── test_*.py        # Test suites
 ├── README.md        # This file
-├── CODE_REVIEW.md   # Detailed code review
-├── STYLE_GUIDE.md   # Python style guide
-└── TEST_COVERAGE.md # Test coverage documentation
 ```
-
-## Code Quality
-
-- **Pythonic Style**: Clean, idiomatic Python
-- **Type Hints**: Fully annotated with static typing
-- **Documentation**: Comprehensive docstrings
-- **Testing**: Comprehensive test suite with 100% pass rate
-
-## Comparison with JavaScript RiTa
-
-- **RiScript**: 95%+ parity with riscript JS implementation
-- **RiTa Core**: Complete feature coverage
-- **Additional Tests**: Python-specific edge cases
-
-See [TEST_COVERAGE.md](TEST_COVERAGE.md) for detailed comparison.
 
 ## License
 

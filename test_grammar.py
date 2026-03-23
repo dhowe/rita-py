@@ -770,7 +770,7 @@ class TestGrammars:
             'start': '$r.pluralize()',
             'r':     '[ mouse | mouse ]'
         })
-        assert rg.expand() == 'mouses'
+        assert rg.expand() == 'mice'  # mouse -> mice
 
     def test_handles_symbol_transforms_on_statics(self):
         rg = RiGrammar({
@@ -793,7 +793,7 @@ class TestGrammars:
         if IfRiTa:
             assert rg.expand() in ['mice mouse', 'ants ant']
         else:
-            assert rg.expand() in ['mouses mouse', 'ants ant']
+            assert rg.expand() in ['mice mouse', 'ants ant']
 
     def test_handles_inline_specials(self):
         rg = RiGrammar({
