@@ -5,17 +5,16 @@ Python port of RiTa
 ## Features
 
 - **RiScript Interpreter**: Parser with support for choices, gates, statics, dynamics, and transforms
-- **RiTa Compatibility**: Full RiTa functionality including text analysis utilities
 
 ## Examples
 
 Run the included example to see RiScript in action:
 
 ```bash
-PYTHONPATH=. python3 examples/simple_example.py
+PYTHONPATH=. python3 examples/riscript_examples.py
 ```
 
-See [examples/simple_example.py](examples/simple_example.py) for code demonstrating:
+See [examples/riscript_examples.py](examples/riscript_examples.py) for code demonstrating:
 - Choice selection
 - Word transformations
 - Dynamic and static assignments
@@ -42,7 +41,7 @@ from riscript import RiScript
 rs = RiScript()
 
 # Basic evaluation
-result = rs.evaluate('The [ox | ox ].pluralize run', {})
+result = rs.evaluate('The [ox | ox ].pluralize run')
 print(result)  # Output: "The oxen run"
 
 # Using dynamic values
@@ -50,11 +49,11 @@ result = rs.evaluate('$name.cap() went to the store.', {'name': 'john'})
 print(result)  # Output: "John went to the store."
 
 # Gate logic
-result = rs.evaluate('[ @{$age:18} adult || child ]', {'age': 20})
+result = rs.evaluate('[ @{$age: {@gte: 18}} adult || child ]', {'age': 20})
 print(result)  # Output: "adult"
 
 # Multi-pass evaluation
-result = rs.evaluate('$name=John\n$name.cap() went home.', {})
+result = rs.evaluate('$name=John\n$name.cap() went home.')
 print(result)  # Output: "John went home."
 ```
 
@@ -92,20 +91,13 @@ pytest test_riscript.py::TestTransforms
 pytest test_riscript.py::TestGates::test_else_gates
 pytest test_riscript.py::TestChoices::test_multiword_choice
 ```
-
-### Run with verbose output
-
-```bash
-pytest -v
-```
-
 ## Core Concepts
 
 ### RiScript Statements
 
 - **Dynamic statements** (`$foo=bar`) - Runtime assignments
 - **Static statements** (`#foo=[a|b]`) - Compile-time replacements
-- **Silent blocks** (`*content*`) - Ignored during output
+- **Silent blocks** (`{$foo=bar}`) - Silent evaluation
 
 ### Choices
 
@@ -113,7 +105,7 @@ pytest -v
 [option1 | option2 | option3]
 ```
 
-Randomly selects one option (weighted by repetition).
+Randomly selects one option (weights optional).
 
 ### Gates
 
@@ -133,17 +125,20 @@ Built-in transforms: articlize, lower, uc, pluralize, cap, etc.
 
 ## Test Coverage
 
-- **Total Tests**: 300
-- **Passing**: 300/300 (100%)
-- **Coverage Areas**:
-  - Gate evaluation (boolean, equality, comparison, existence)
-  - Choice selection (weighted, multi-word, transforms)
-  - Transform system (custom, static, context-based)
-  - Statement handling (dynamic, static, silent)
+- **Areas**:
+  - Gate evaluation (boolean, equality, comparison, existence, regex, deferred)
+  - Choice selection (weighted, multi-word, transforms, spacing variants)
+  - Transform system (custom, static, context-based, no-parens, old-style `$.fn`)
+  - Statement handling (dynamic, static, silent `{$foo=...}`, line-break form)
+  - Assignment types (inline `[$foo=...]`, line `$foo=...`, silent `{$foo=...}`, static `#foo=...`)
+  - Object method/property access from context (`$obj.prop`, `$obj.method()`, `$obj.method` no-parens)
+  - Comment stripping (`//` line comments, `/* */` block comments, `\r\n` line endings)
+  - Continuation lines (`~\n` tilde and `\<newline>` backslash)
+  - HTML entities (`&num;`, `&#x00023;`, `&nbsp;`, `&lpar;`, etc.)
+  - Unicode, emoji, and Chinese character support
   - Query class (operand extraction, testing)
-  - Hash utilities (string hashing, parsing)
-  - Unicode and emoji support
-  - All JavaScript parity tests
+  - Hash utilities (string hashing, JSOL parsing)
+  - Full JavaScript (riscript.tests.js + grammar.tests.js) parity
 
 ## Project Structure
 
@@ -153,8 +148,8 @@ rita-py/
 ├── randgen.py       # Seeded random number generator
 ├── util.py          # Utility functions
 ├── examples/
-│   ├── simple_example.py  # Demo program
-│   └── README.md          # Examples documentation
+│   ├── riscript_examples.py  # Demo program
+│   └── README.md              # Examples documentation
 ├── test_*.py        # Test suites
 ├── README.md        # This file
 ```

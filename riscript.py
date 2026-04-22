@@ -464,15 +464,17 @@ DEFAULT_TRANSFORMS = {
 
 # ── Pre/post parse ───────────────────────────────────────────────────────────
 
-_COMMENT_RE        = re.compile(r'(?:^|\n)\s*//[^\n]*|/\*.*?\*/', re.DOTALL | re.MULTILINE)
+_COMMENT_RE        = re.compile(r'(?:^|\r?\n)\s*//[^\r\n]*|/\*.*?\*/', re.DOTALL | re.MULTILINE)
 _INLINE_ASSIGN_RE  = re.compile(r'^([$#][A-Za-z_0-9]+)\s*=(.+)$', re.MULTILINE)
 _CONTINUATION_RE   = re.compile(r'~\n')
-_WEIGHT_PAREN_RE   = re.compile(r'\((\d+)\)')
+_WEIGHT_PAREN_RE   = re.compile(r'\(\s*(\d+)\s*\)')
 _MD_LINK_RE        = re.compile(r'\[([^\]]+)\]\(([^)]+)\)')
 
 def _pre_parse(text):
     if not text:
         return text
+    # normalize Windows-style line endings
+    text = text.replace('\r\n', '\n').replace('\r', '\n')
     # escape markdown links [text](url) -> entity form  (BEFORE comment stripping, URLs may contain //)
     text = _MD_LINK_RE.sub(lambda m: f'&lsqb;{m.group(1)}&rsqb;&lpar;{m.group(2)}&rpar;', text)
     # strip comments (consume preceding \n for line comments to avoid blank lines)
@@ -548,12 +550,17 @@ def _decode_entities(text):
         return _ENTITY_MAP.get(name, m.group(0))
     return re.sub(r'&([a-zA-Z][a-zA-Z0-9]*|#[0-9]+|#x[0-9a-fA-F]+);', _replace, text)
 
+_UNICODE_WHITESPACE_RE = re.compile(r'[\u00a0\u2000-\u200b\u2028\u2029\u3000]+')
+
 def _post_parse(text):
     if not text:
         return text
     # any unresolved pending gates become empty string
     text = re.sub(r'@@\d{9,11}', '', text)
-    return _decode_entities(text)
+    text = _decode_entities(text)
+    # normalize Unicode whitespace (e.g. &nbsp; -> \u00a0) to regular space
+    text = _UNICODE_WHITESPACE_RE.sub(' ', text)
+    return text
 
 # ── JSOL parser (JSON-ish with unquoted keys and @ operators) ────────────────
 
@@ -1546,6 +1553,9 @@ class RiGrammar:
             raise ValueError('expected non-empty string name')
         if definition is None:
             raise ValueError(f'undefined rule definition: {name}')
+        # convert list rules to pipe-separated string (JS array syntax)
+        if isinstance(definition, list):
+            definition = ' | '.join(str(v) for v in definition)
         # disallow $-prefixed names (dynamic is the default)
         if name.startswith('$'):
             bare = name[1:]
@@ -1619,9 +1629,8 @@ class RiGrammar:
             raise ValueError(f'Invalid start rule: "{start}"')
 
         script = self._to_script(start)
-        eval_opts = {k: v for k, v in options.items() if k != 'start'}
         visitor = EvalVisitor(self.context, DEFAULT_TRANSFORMS)
-        return self._scripting._evaluate(input=script, visitor=visitor, **eval_opts)
+        return self._scripting._evaluate(input=script, visitor=visitor)
 
     def _to_script(self, start='start'):
         """Convert grammar rules to a self-contained RiScript string.

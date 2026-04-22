@@ -892,7 +892,7 @@ class TestGrammars:
             ('&lt;',     '<'),
             ('&gt;',     '>'),
             ('&#96;',    '`'),
-            ('&nbsp;',   '\u00a0'),
+            ('&nbsp;',   ' '),
         ]
 
         slash_singles = [
