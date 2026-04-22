@@ -16,13 +16,13 @@ Python port of [RiTa](https://github.com/dhowe/ritajs)
 | `rita/inflector.py` | ✅ Complete | 763 passing |
 | `rita/conjugator.py` | ✅ Complete | 345 passing |
 | `rita/stemmer.py` | ✅ Complete | 6,387 passing |
-| Tagger | 🔲 Planned | — |
+| `rita/tagger.py` | ✅ Complete | 318 passing |
 | Analyzer | 🔲 Planned | — |
 | Lexicon | 🔲 Planned | — |
 | Concorder | 🔲 Planned | — |
 | Markov | 🔲 Planned | — |
 
-**7,643 tests passing** as of April 2026.
+**7,991 tests passing** as of April 2026.
 
 ## Features
 

@@ -9,6 +9,7 @@ from rita.util import Util, RE
 from rita.randgen import RandGen
 from rita.rita_lts import LetterToSound
 from rita.stemmer import Stemmer
+from rita.tagger import Tagger
 
 # RiScript / RiGrammar (already fully ported)
 import sys
@@ -29,4 +30,5 @@ __all__ = [
     "RE",
     "LetterToSound",
     "Stemmer",
+    "Tagger",
 ]
