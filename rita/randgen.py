@@ -120,6 +120,25 @@ class RandGen:
 
         return len(probs) - 1
 
+    def pselect2(self, weights: List[float]):
+        """
+        Select a value from weights using weighted random selection.
+        Weights do NOT need to sum to 1 — they are used directly as relative weights.
+
+        Args:
+            weights: List of weights (treated as un-normalized probabilities)
+
+        Returns:
+            The selected value (not index)
+        """
+        total = sum(weights)
+        rand = self._rndf() * total
+        for ele in weights:
+            rand -= ele
+            if rand < 0:
+                return ele
+        return weights[-1]
+
     def ndist(self, weights: List[float], temp: Optional[float] = None) -> List[float]:
         """
         Normalize weights to probability distribution (sum to 1.0)

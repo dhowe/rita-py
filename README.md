@@ -6,23 +6,24 @@ Python port of [RiTa](https://github.com/dhowe/ritajs)
 
 | Component | Status | Tests |
 |-----------|--------|-------|
-| RiScript interpreter | ✅ Complete | 373 passing |
-| RiGrammar | ✅ Complete | included above |
+| RiScript interpreter | ✅ Complete | 723 passing |
+| RiGrammar | ✅ Complete | 143 passing |
 | `rita` package structure | ✅ Complete | — |
 | `rita_dict.json` (21,987 entries) | ✅ Complete | — |
 | `rita_lts.py` (Letter-to-Sound) | ✅ Complete | — |
-| `rita/util.py` + `rita/randgen.py` | ✅ Complete | included above |
-| `rita/tokenizer.py` | ✅ Complete | 78 passing |
+| `rita/util.py` + `rita/randgen.py` | ✅ Complete | 227 passing |
+| `rita/tokenizer.py` | ✅ Complete | 151 passing |
 | `rita/inflector.py` | ✅ Complete | 763 passing |
-| `rita/conjugator.py` | ✅ Complete | 345 passing |
+| `rita/conjugator.py` | ✅ Complete | 279 passing |
 | `rita/stemmer.py` | ✅ Complete | 6,387 passing |
 | `rita/tagger.py` | ✅ Complete | 318 passing |
-| Analyzer | 🔲 Planned | — |
-| Lexicon | 🔲 Planned | — |
-| Concorder | 🔲 Planned | — |
-| Markov | 🔲 Planned | — |
+| `rita/analyzer.py` | ✅ Complete | 105 passing |
+| `rita/lexicon.py` | ✅ Complete | 370 passing |
+| `rita/markov.py` | ✅ Complete | 150 passing |
+| `rita/concorder.py` | ✅ Complete | — |
+| `rita/rita.py` | ✅ Complete | 200 passing |
 
-**7,991 tests passing** as of April 2026.
+**9,816 assertions passing** as of April 2026.
 
 ## Features
 
