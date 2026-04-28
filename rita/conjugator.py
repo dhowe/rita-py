@@ -1469,7 +1469,29 @@ class Conjugator:
         return verb
 
     def _handle_stem(self, word):
-        """Simplified: return word if in dict as vb, else unchanged."""
+        """Port of JS _handleStem: find the best matching verb base form for a stem."""
+        # already a base-form verb in the lexicon
         if _has_tag(word, "vb"):
             return word
+
+        verbs = _all_verbs()
+        w = word
+        while len(w) > 1:
+            candidates = [v for v in verbs if v.startswith(w)]
+            if candidates:
+                # prefer shorter words first (same as JS sort)
+                candidates.sort(key=len)
+                for c in candidates:
+                    if word == c:
+                        return word
+                    # import lazily to avoid circular import
+                    from rita.stemmer import Stemmer
+                    if Stemmer.stem(c) == word:
+                        return c
+                    unc = self.unconjugate(Stemmer.stem(c))
+                    if unc and unc == word:
+                        return c
+            w = w[:-1]
+
+        # can't find anything — return original
         return word

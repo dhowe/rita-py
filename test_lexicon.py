@@ -831,3 +831,111 @@ def test_to_phone_array():
     raw = lex.raw_phones("tornado")
     result = lex._to_phone_array(raw)
     assert result == ["t", "ao", "r", "n", "ey", "d", "ow"]
+
+
+# ── randomWord.pos.syls ───────────────────────────────────────────────────────
+
+def test_random_word_pos_syls():
+    from rita.rita import RiTa
+
+    result = lex.random_word({'numSyllables': 3, 'pos': 'vbz'})
+    assert len(result) > 0
+    syllables = RiTa.syllables(result)
+    assert len(syllables.split('/')) == 3, f"GOT: {result} ({syllables})"
+    assert RiTa.is_verb(result), f"Expected verb, got: {result}"
+
+    result = lex.random_word({'numSyllables': 1, 'pos': 'n'})
+    assert len(result) > 0
+    syllables = RiTa.syllables(result)
+    assert len(syllables.split('/')) == 1, f"GOT: {result} ({syllables})"
+    assert RiTa.is_noun(result), f"Expected noun, got: {result}"
+
+    result = lex.random_word({'numSyllables': 1, 'pos': 'nns'})
+    assert len(result) > 0
+    syllables = RiTa.syllables(result)
+    assert len(syllables.split('/')) == 1, f"GOT: {result} ({syllables})"
+    assert RiTa.is_noun(result), f"Expected noun, got: {result}"
+
+    result = lex.random_word({'numSyllables': 5, 'pos': 'nns'})
+    assert len(result) > 0
+    assert RiTa.is_noun(result), f"Expected noun, got: {result}"
+
+
+# ── alliterations ─────────────────────────────────────────────────────────────
+
+def test_alliterations_num_syllables():
+    result = lex.alliterations_sync("cat", {'minLength': 1, 'numSyllables': 7})
+    assert result == ['electrocardiogram', 'electromechanical', 'telecommunications']
+    for word in result:
+        assert lex.is_alliteration(word, "cat"), f"FAIL: {word}"
+
+
+def test_alliterations_pos():
+    result = lex.alliterations_sync("cat", {'numSyllables': 7, 'pos': 'n'})
+    assert result == ['electrocardiogram', 'telecommunications']
+    for word in result:
+        assert lex.is_alliteration(word, "cat"), f"FAIL: {word}"
+
+    result = lex.alliterations_sync("cat", {'minLength': 14, 'pos': 'v'})
+    for word in result:
+        assert len(word) >= 14
+    assert result == ['counterbalance']
+
+    result = lex.alliterations_sync("dog", {'minLength': 13, 'pos': 'rb', 'limit': 11})
+    for word in result:
+        assert len(word) >= 13
+    assert result == [
+        'coincidentally', 'conditionally', 'confidentially', 'contradictorily',
+        'devastatingly', 'expeditiously', 'paradoxically', 'predominantly',
+        'traditionally', 'unconditionally', 'unpredictably',
+    ]
+
+    result = lex.alliterations_sync("freedom", {'minLength': 14, 'pos': 'nns'})
+    for word in result:
+        assert len(word) >= 14
+    assert result == [
+        'featherbeddings', 'fundamentalists', 'pharmaceuticals',
+        'photosyntheses', 'reconfigurations', 'sophistications',
+    ]
+
+
+def test_alliterations():
+    result = lex.alliterations_sync("", {'silent': 1})
+    assert len(result) < 1
+
+    result = lex.alliterations_sync("#$%^&*", {'silent': 1})
+    assert len(result) < 1
+
+    result = lex.alliterations_sync("umbrella", {'silent': 1})
+    assert len(result) < 1, "failed on 'umbrella'"
+
+    result = lex.alliterations_sync("cat", {'limit': 100})
+    assert len(result) == 100, f"failed on 'cat': len={len(result)}"
+    assert "cat" not in result
+    for word in result:
+        assert lex.is_alliteration(word, "cat"), f"FAIL: {word}"
+
+    result = lex.alliterations_sync("dog", {'limit': 100})
+    assert "dog" not in result
+    assert len(result) == 100, f"failed on 'dog': len={len(result)}"
+    for word in result:
+        assert lex.is_alliteration(word, "dog"), f"FAIL: {word}"
+
+    result = lex.alliterations_sync("dog", {'minLength': 15})
+    assert 0 < len(result) < 5, f"got length={len(result)}"
+    for word in result:
+        assert lex.is_alliteration(word, "dog"), f"FAIL1: {word}"
+
+    result = lex.alliterations_sync("cat", {'minLength': 16})
+    assert 0 < len(result) < 15, "failed on 'cat'"
+    for word in result:
+        assert lex.is_alliteration(word, "cat"), f"FAIL2: {word}"
+
+    result = lex.alliterations_sync("khatt", {'minLength': 16})
+    assert 0 < len(result) < 15, "failed on 'khatt'"
+    for word in result:
+        assert lex.is_alliteration(word, "cat"), f"FAIL2: {word}"
+
+    assert lex.alliterations_sync("a") == []
+    assert lex.alliterations_sync("I") == []
+    assert lex.alliterations_sync("K") == []

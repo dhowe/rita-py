@@ -499,3 +499,73 @@ class TestConjugateVerbs:
         assert conj.conjugate("rent", opt) == "have rented"
         assert conj.conjugate("repurchase", opt) == "have repurchased"
         assert conj.conjugate("roast", opt) == "have roasted"
+
+
+# ── accept stems ─────────────────────────────────────────────────────────────
+
+class TestAcceptStems:
+    def test_accept_stems(self):
+        from rita.rita import RiTa
+
+        plur_past2  = {"number": PLURAL,    "person": SECOND, "tense": PAST}
+        plur_pres2  = {"number": PLURAL,    "person": SECOND, "tense": PRESENT}
+        sing_pres3  = {"number": SINGULAR,  "person": THIRD,  "tense": PRESENT}
+
+        stem = RiTa.stem("walking")
+        assert conj.conjugate(stem, plur_past2) == "walked",  f"{stem} => walked"
+        assert conj.conjugate(stem, plur_pres2) == "walk",    f"{stem} => walk"
+        assert conj.conjugate(stem, sing_pres3) == "walks",   f"{stem} => walks"
+
+        stem = RiTa.stem("writing")
+        assert conj.conjugate(stem, plur_past2) == "wrote",   f"{stem} => wrote"
+        assert conj.conjugate(stem, plur_pres2) == "write",   f"{stem} => write"
+        assert conj.conjugate(stem, sing_pres3) == "writes",  f"{stem} => writes"
+
+        stem = RiTa.stem("asked")
+        assert conj.conjugate(stem, plur_past2) == "asked",   f"{stem} => asked"
+        assert conj.conjugate(stem, plur_pres2) == "ask",     f"{stem} => ask"
+        assert conj.conjugate(stem, sing_pres3) == "asks",    f"{stem} => asks"
+
+        stem = RiTa.stem("changed")
+        assert conj.conjugate(stem, plur_past2) == "changed", f"{stem} => changed"
+        assert conj.conjugate(stem, plur_pres2) == "change",  f"{stem} => change"
+        assert conj.conjugate(stem, sing_pres3) == "changes", f"{stem} => changes"
+
+        stem = RiTa.stem("admired")
+        assert conj.conjugate(stem, plur_past2) == "admired", f"{stem} => admired"
+        assert conj.conjugate(stem, plur_pres2) == "admire",  f"{stem} => admire"
+        assert conj.conjugate(stem, sing_pres3) == "admires", f"{stem} => admires"
+
+        stem = RiTa.stem("cured")
+        assert conj.conjugate(stem, plur_past2) == "cured",   f"{stem} => cured"
+        assert conj.conjugate(stem, plur_pres2) == "cure",    f"{stem} => cure"
+        assert conj.conjugate(stem, sing_pres3) == "cures",   f"{stem} => cures"
+
+        stem = RiTa.stem("studies")
+        assert conj.conjugate(stem, plur_past2) == "studied", f"{stem} => studied"
+        assert conj.conjugate(stem, plur_pres2) == "study",   f"{stem} => study"
+        assert conj.conjugate(stem, sing_pres3) == "studies", f"{stem} => studies"
+
+    def test_stem_pairs(self):
+        from rita.rita import RiTa
+
+        opts = {"number": PLURAL, "person": SECOND, "tense": PAST}
+        pairs = [
+            ("accompanying", "accompanied"),
+            ("feeling",       "felt"),
+            ("placating",     "placated"),
+            ("centralizing",  "centralized"),
+            ("humanized",     "humanized"),
+            ("boosted",       "boosted"),
+            ("wearing",       "wore"),
+            ("aroused",       "aroused"),
+            ("rising",        "rose"),
+            ("raising",       "raised"),
+            ("vibrating",     "vibrated"),
+            ("injection",     "injected"),
+            ("vibration",     "vibrated"),
+        ]
+        for word, expected in pairs:
+            stem = RiTa.stem(word)
+            result = conj.conjugate(stem, opts)
+            assert result == expected, f"{word} => {stem} => {result} (expected {expected})"

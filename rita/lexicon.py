@@ -5,6 +5,7 @@ Python port of ritajs/src/lexicon.js
 import json
 import os
 import re as _re
+import random as _random
 
 from rita.util import Util
 
@@ -60,6 +61,11 @@ class Lexicon:
     def __init__(self, data=None):
         self._data = data          # custom dict; None = lazy-load default
         self._dict_cache = None
+        self._words = None         # cached list of dict keys
+        self._syl_index = None     # dict: num_syllables -> [word, ...]
+        self._pos_index = None     # dict: pos_tag -> [word, ...]
+        self._plural_cache = {}    # word -> plural form
+        self._conjug_cache = {}    # (word, pos) -> conjugated form
         self._analyzer = None
         self._tagger = None
         self._inflector = None
@@ -76,6 +82,31 @@ class Lexicon:
             with open(p) as f:
                 self._dict_cache = json.load(f)
         return self._dict_cache
+
+    def _get_words(self):
+        if self._words is None:
+            self._words = list(self._get_dict().keys())
+        return self._words
+
+    def _get_syl_index(self):
+        if self._syl_index is None:
+            idx = {}
+            for word, data in self._get_dict().items():
+                if data:
+                    n = data[0].count(' ') + 1
+                    idx.setdefault(n, []).append(word)
+            self._syl_index = idx
+        return self._syl_index
+
+    def _get_pos_index(self):
+        if self._pos_index is None:
+            idx = {}
+            for word, data in self._get_dict().items():
+                if data and len(data) > 1:
+                    for tag in data[1].split(' '):
+                        idx.setdefault(tag, []).append(word)
+            self._pos_index = idx
+        return self._pos_index
 
     def _get_analyzer(self):
         if self._analyzer is None:
@@ -144,7 +175,7 @@ class Lexicon:
 
         # no arguments
         if pattern is None and opts is None:
-            return self._get_randgen().random(list(d.keys()))
+            return _random.choice(self._get_words())
 
         # single dict argument = opts
         if isinstance(pattern, dict) and opts is None:
@@ -173,20 +204,57 @@ class Lexicon:
 
     def search_sync(self, pattern=None, opts=None):
         d = self._get_dict()
-        words = list(d.keys())
 
         if pattern is None and not opts:
-            return words
+            return list(self._get_words())
 
         regex, opts = self._parse_regex(pattern, opts or {})
         self._parse_args(opts)
 
+        num_syl = opts.get('numSyllables', 0)
+        target_pos = opts.get('targetPos')
+        if num_syl:
+            words = list(self._get_syl_index().get(num_syl, []))
+        elif target_pos:
+            words = list(self._get_pos_index().get(target_pos, []))
+        else:
+            words = list(self._get_words())
+
+        limit = opts.get('limit', 10)
+
+        # Fast path: rejection sampling avoids a full O(n) shuffle when we
+        # only need a small number of results.
+        if opts.get('shuffle') and 0 < limit <= 3 and len(words) > limit * 10:
+            result = []
+            seen = set()
+            attempts = min(300, len(words))
+            indices = _random.sample(range(len(words)), attempts)
+            for i in indices:
+                word = words[i]
+                data = d.get(word)
+                if not self._check_criteria(word, data, opts):
+                    continue
+                if opts.get('targetPos'):
+                    word = self._match_pos(word, data, opts, opts.get('strictPos', False))
+                    if not word:
+                        continue
+                    data = d.get(word) if word in d else None
+                if word in seen:
+                    continue
+                if regex is None or self._regex_match(word, data, regex, opts.get('type')):
+                    seen.add(word)
+                    result.append(word)
+                    if len(result) == limit:
+                        return result
+            if result:
+                return result
+            # fall through to full scan if rejection sampling came up empty
+
         if opts.get('shuffle'):
-            words = self._get_randgen().shuffle(words)
+            _random.shuffle(words)
 
         result = []
         seen = set()
-        limit = opts.get('limit', 10)
 
         for word in words:
             data = d.get(word)
@@ -227,9 +295,19 @@ class Lexicon:
         if not phone:
             return []
 
-        words = list(d.keys())
+        num_syl = opts.get('numSyllables', 0)
+        target_pos = opts.get('targetPos')
+        if num_syl:
+            words = list(self._get_syl_index().get(num_syl, []))
+        elif target_pos:
+            words = list(self._get_pos_index().get(target_pos, []))
+        else:
+            words = list(self._get_words())
         if opts.get('shuffle'):
-            words = self._get_randgen().shuffle(words)
+            _random.shuffle(words)
+
+        if opts.get('shuffle'):
+            _random.shuffle(words)
 
         result = []
         limit = opts.get('limit', 10)
@@ -282,9 +360,19 @@ class Lexicon:
                 warnings.warn(f'Failed parsing first phone in "{the_word}"')
             return []
 
-        words = list(d.keys())
+        num_syl = opts.get('numSyllables', 0)
+        target_pos = opts.get('targetPos')
+        if num_syl:
+            words = list(self._get_syl_index().get(num_syl, []))
+        elif target_pos:
+            words = list(self._get_pos_index().get(target_pos, []))
+        else:
+            words = list(self._get_words())
         if opts.get('shuffle'):
-            words = self._get_randgen().shuffle(words)
+            _random.shuffle(words)
+
+        if opts.get('shuffle'):
+            _random.shuffle(words)
 
         result = []
         limit = opts.get('limit', 10)
@@ -394,9 +482,13 @@ class Lexicon:
             return []
 
         min_val = float('inf')
-        words = list(d.keys())
+        target_pos = opts.get('targetPos')
+        if target_pos:
+            words = list(self._get_pos_index().get(target_pos, []))
+        else:
+            words = list(self._get_words())
         if opts.get('shuffle'):
-            words = self._get_randgen().shuffle(words)
+            _random.shuffle(words)
 
         result = []
         seen = set()
@@ -425,6 +517,10 @@ class Lexicon:
                 phones_b = self._to_phone_array(phones) if phones else word
             else:
                 phones_b = word
+
+            # Skip if length difference already exceeds current best (MED lower bound)
+            if abs(len(phones_a) - len(phones_b)) > min_val:
+                continue
 
             med = self.min_edit_dist(phones_a, phones_b)
 
@@ -468,11 +564,18 @@ class Lexicon:
         if opts.get('pluralize'):
             if word.endswith('ness') or word.endswith('ism'):
                 return None
-            result = self._get_inflector().pluralize(word)
+            result = self._plural_cache.get(word)
+            if result is None:
+                result = self._get_inflector().pluralize(word)
+                self._plural_cache[word] = result
             if not self._is_noun(result):
                 return None
         elif conjugate and pos_match:  # only reconjugate base verb forms
-            result = self._reconjugate(word, orig_pos)
+            key = (word, orig_pos)
+            result = self._conjug_cache.get(key)
+            if result is None:
+                result = self._reconjugate(word, orig_pos)
+                self._conjug_cache[key] = result
         # if exact_match (already the right verb form), return word as-is
 
         if result != word:
@@ -495,8 +598,7 @@ class Lexicon:
             return False
         num_syl = opts.get('numSyllables', 0)
         if num_syl and rdata:
-            syls = rdata[0].split(' ')
-            if num_syl != len(syls):
+            if num_syl != rdata[0].count(' ') + 1:
                 return False
         return True
 
