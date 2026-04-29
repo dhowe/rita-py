@@ -61,8 +61,11 @@ def test_inflected_verbs():
     assert pos("fates") == ["nns"]
     assert pos("fates", simple=1) == ["n"]
     assert pos("hates") == ["vbz"]
+    assert pos("hates", simple=1) == ["v"]
     assert pos("hated") == ["vbd"]
+    assert pos("hated", simple=1) == ["v"]
     assert pos("hating") == ["vbg"]
+    assert pos("hating", simple=1) == ["v"]
     assert pos("He rode the horse") == ['prp', 'vbd', 'dt', 'nn']
     assert pos("He has ridden the horse") == ['prp', 'vbz', 'vbn', 'dt', 'nn']
     assert pos("He rowed the boat") == ['prp', 'vbd', 'dt', 'nn']
@@ -370,6 +373,9 @@ def test_all_tags():
     assert tagger.all_tags("resold") == ['vbd', 'vbn']
     assert tagger.all_tags("settled") == ['vbd', 'vbn', 'jj']
     assert tagger.all_tags("started") == ['vbd', 'jj', 'vbn']
+
+    for w in ["tiding", "census", "bonus", "thermos", "circus"]:
+        assert "nn" in tagger.all_tags(w), f"expected 'nn' in all_tags({w!r})"
 
 # ── hasTag ───────────────────────────────────────────────────────────────────
 

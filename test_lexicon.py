@@ -12,6 +12,8 @@ lex = Lexicon()
 # ── hasWord ───────────────────────────────────────────────────────────────────
 
 def test_has_word():
+    for _ in range(10):
+        assert lex.has_word(lex.random_word()) is True
     assert lex.has_word("random") is True
     assert lex.has_word("dog") is True
     assert lex.has_word("men") is True

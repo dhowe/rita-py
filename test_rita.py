@@ -193,9 +193,10 @@ class TestIsPunct:
 
         ok(not RiTa.is_punct("! "))
         ok(not RiTa.is_punct(" !"))
-        ok(not RiTa.is_punct("!  "))
-        ok(not RiTa.is_punct("  !"))
-        ok(not RiTa.is_punct("   !"))
+        ok(not RiTa.is_punct("!  "))   # double space
+        ok(not RiTa.is_punct("  !"))   # double space
+        ok(not RiTa.is_punct("!\t"))   # tab
+        ok(not RiTa.is_punct("   !"))  # three spaces
 
         for c in '$%&^,':
             ok(RiTa.is_punct(c), f"fail at: {c}")
@@ -203,9 +204,20 @@ class TestIsPunct:
         for c in ',;:!?)([].#"\\!@$%&}<>|-/\\*{^':
             ok(RiTa.is_punct(c), f"fail at: {c}")
 
+        # replacement chars + quote-like punctuation
+        for c in '"\ufffd\ufffd\ufffd\ufffd\ufffd\ufffd\ufffd`\'':
+            ok(RiTa.is_punct(c), f"fail at: {c!r}")
+
+        for c in '"\ufffd\ufffd\ufffd\ufffd\ufffd\ufffd\ufffd`\',;:!?)([].#"\\!@$%&}<>|-/\\*{^':
+            ok(RiTa.is_punct(c), f"fail at: {c!r}")
+
         ok(not RiTa.is_punct(""))
 
         assert RiTa.is_punct('你') == False
+
+        chinese = '這是一些隨機的中文字後來開始都會發揮吧首度落後兩分看來都是廢話卡卡聖誕賀卡還是阿塞德就回家啊哈薩克話說快時間啊但我阿拉斯加'
+        for c in chinese:
+            ok(not RiTa.is_punct(c), f"fail at {c!r}")
 
         nopunct = 'Helloasdfnals  FgG   \t kjdhfakjsdhf askjdfh aaf98762348576'
         for c in nopunct:

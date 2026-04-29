@@ -170,6 +170,12 @@ def test_stresses():
     expected = "0 1 1 1/0 1 0 1/0 1 . 1 0 1/0 1 1 1/0/0 ."
     assert a.stresses(inp) == expected
 
+    # stress-shifted homophones
+    assert a.stresses("to present, to export, to decide, to begin") == "1 1/0 , 1 1/0 , 1 0/1 , 1 0/1"
+    assert a.stresses("to preSENT, to exPORT, to deCIDE, to beGIN")  == "1 1/0 , 1 1/0 , 1 0/1 , 1 0/1"
+    assert a.stresses("chevrolet") == "0/0/1"
+    assert a.stresses("genuine")   == "1/0/0"
+
 
 # ── hyphenated words (single token) ─────────────────────────────────────────
 
@@ -334,6 +340,76 @@ def test_hyphenated_words_3():
         assert feats['stresses']  == exp['stresses'],  f"[stresses] fail at {word}: got {feats['stresses']}"
         assert feats['syllables'] == exp['syllables'], f"[syllables] fail at {word}: got {feats['syllables']}"
         assert tok.tokenize(word) == feats['tokens'].split()
+
+
+# ── handle dashes ────────────────────────────────────────────────────────────
+
+def test_handle_dashes():
+    """Port of JS 'Should handle dashes' — github.com/dhowe/rita/issues/176"""
+    from rita.tokenizer import Tokenizer
+    tok = Tokenizer()
+
+    # U+2012 figure dash
+    sentence = "Teaching\u2012the profession has always appealed to me."
+    feats = a.analyze(sentence)
+    assert feats['pos']    == "vbg \u2012 dt nn vbz rb vbd to prp ."
+    assert feats['tokens'] == "Teaching \u2012 the profession has always appealed to me ."
+    assert tok.tokenize(sentence) == feats['tokens'].split()
+
+    # U+2013 en-dash
+    sentence = "The teacher assigned pages 101\u2013181 for tonight's reading material. "
+    feats = a.analyze(sentence)
+    assert feats['pos']    == "dt nn vbn nns cd \u2013 cd in nns vbg jj ."
+    assert feats['tokens'] == "The teacher assigned pages 101 \u2013 181 for tonight's reading material ."
+    assert tok.tokenize(sentence.strip()) == feats['tokens'].split()
+
+    # U+2014 em-dash (1)
+    sentence = "Type two hyphens\u2014without a space before, after, or between them."
+    feats = a.analyze(sentence)
+    assert feats['pos']    == "nn cd nns \u2014 in dt nn in , in , cc in prp ."
+    assert feats['tokens'] == "Type two hyphens \u2014 without a space before , after , or between them ."
+    assert tok.tokenize(sentence) == feats['tokens'].split()
+
+    # U+2014 em-dash (2)
+    sentence = "Phones, hand-held computers, and built-in TVs\u2014each a possible distraction\u2014can lead to a dangerous situation if used while driving."
+    feats = a.analyze(sentence)
+    assert feats['pos']    == "nns , jj nns , cc jj nnps \u2014 dt dt jj nn \u2014 md vb to dt jj nn in vbn in vbg ."
+    assert feats['tokens'] == "Phones , hand-held computers , and built-in TVs \u2014 each a possible distraction \u2014 can lead to a dangerous situation if used while driving ."
+    assert tok.tokenize(sentence) == feats['tokens'].split()
+
+    # double-hyphen "--"
+    sentence = "He is afraid of two things--spiders and senior prom."
+    feats = a.analyze(sentence)
+    assert feats['pos']    == "prp vbz jj in cd nns -- nns cc jj nn ."
+    assert feats['tokens'] == "He is afraid of two things -- spiders and senior prom ."
+    assert tok.tokenize(sentence) == feats['tokens'].split()
+
+
+# ── phones (raw) ──────────────────────────────────────────────────────────────
+
+def test_phones_raw():
+    """Port of JS 'Should call phones(raw)' — phones with rawPhones=True option."""
+    opts = {'rawPhones': True}
+    assert a.phones("",       opts) == ""
+    assert a.phones("b",      opts) == "b"
+    assert a.phones("B",      opts) == "b"
+    assert a.phones("The",    opts) == "dh-ah"
+    assert a.phones("flowers", opts) == "f-l-aw-er-z"
+    assert a.phones("mice",   opts) == "m-ay-s"
+    assert a.phones("ant",    opts) == "ae-n-t"
+    assert a.phones("The.",   opts) == "dh-ah ."
+
+    assert a.phones("The boy jumped over the wild dog.", opts) == \
+        "dh-ah b-oy jh-ah-m-p-t ow-v-er dh-ah w-ay-l-d d-ao-g ."
+    assert a.phones("The boy ran to the store.", opts) == \
+        "dh-ah b-oy r-ae-n t-uw dh-ah s-t-ao-r ."
+    assert a.phones("quiche",    opts) == "k-iy-sh"
+    assert a.phones("said",      opts) == "s-eh-d"
+    assert a.phones("chevrolet", opts) == "sh-eh-v-r-ow-l-ey"
+    assert a.phones("women",     opts) == "w-ih-m-eh-n"
+    assert a.phones("genuine",   opts) == "jh-eh-n-y-uw-w-ah-n"
+    assert a.phones("deforestations", opts) == 'd-ih-f-ao-r-ih-s-t-ey-sh-ah-n-z'
+    assert a.phones("schizophrenias",  opts) == 's-k-ih-t-s-ah-f-r-iy-n-iy-ah-z'
 
 
 # ── compute_phones ────────────────────────────────────────────────────────────
