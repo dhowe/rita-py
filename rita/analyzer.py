@@ -224,7 +224,7 @@ class Analyzer:
         return raw_phones
 
     def _raw_phones_word(self, word, opts=None):
-        """Look up phones from dict only (no LTS fallback)."""
+        """Look up phones in dict only (no LTS fallback)."""
         rdata = self._lookup_raw(word)
         if rdata and len(rdata) > 0:
             return rdata[0]
